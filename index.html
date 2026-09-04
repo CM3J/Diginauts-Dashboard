@@ -75,9 +75,21 @@
 
         const APP_ID = "client-map-master-v1";
         const DEFAULT_SERVICES = [
-            "Google PPC", "Meta PPC", "LinkedIn PPC", "Display", "SEO", 
-            "Social Media Mgmt", "Email Marketing", "CRO", "Creative Design", "Analytics & Reporting"
+            "AI Integration",
+            "AIO/SEO",
+            "CRM",
+            "Google Performance",
+            "Graphic Design",
+            "Multimedia",
+            "Organic Social",
+            "Project Management",
+            "Social Performance",
+            "Technical",
+            "Web App Dev",
+            "Web Development",
+            "Web Maintenance"
         ];
+        const SERVICES_VERSION = 2;
 
         const EUR_TO_ZAR = 20.5;
 
@@ -149,10 +161,14 @@
 
                 const unsubServices = servicesRef.onSnapshot(snap => {
                     if (snap.exists && snap.data().list) {
-                        setServices(snap.data().list);
+                        const storedVersion = snap.data().version || 1;
+                        if (storedVersion < SERVICES_VERSION) {
+                            servicesRef.set({ list: DEFAULT_SERVICES, version: SERVICES_VERSION });
+                        } else {
+                            setServices(snap.data().list);
+                        }
                     } else {
-                        // Initialize with defaults if doesn't exist
-                        servicesRef.set({ list: DEFAULT_SERVICES });
+                        servicesRef.set({ list: DEFAULT_SERVICES, version: SERVICES_VERSION });
                     }
                 });
 
@@ -1548,46 +1564,69 @@
 
     <script type="text/html" id="social-src">
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js">@@SCRIPT_CLOSE@@
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js">@@SCRIPT_CLOSE@@
+<script>
+(function(){
+  try { firebase.initializeApp({
+    apiKey: "AIzaSyAAvxcoVE8ZpvG4OC5VKuNnfzuLxidL83U",
+    authDomain: "points-dashboard-78c0b.firebaseapp.com",
+    projectId: "points-dashboard-78c0b",
+    storageBucket: "points-dashboard-78c0b.firebasestorage.app",
+    messagingSenderId: "456742475224",
+    appId: "1:456742475224:web:7b73cf082db54daa488ead"
+  }); } catch(e){}
+  var db = firebase.firestore();
+  var docRef = db.collection('artifacts').doc('client-map-master-v1')
+                 .collection('public').doc('data')
+                 .collection('social').doc('state');
+  window.storage = {
+    get: function(key){
+      return docRef.get().then(function(snap){
+        if(!snap.exists) return null;
+        var data = snap.data() || {};
+        if(typeof data[key] !== 'string') return null;
+        return { value: data[key] };
+      });
+    },
+    set: function(key, value){
+      var payload = { updatedAt: Date.now() };
+      payload[key] = value;
+      return docRef.set(payload, { merge:true });
+    }
+  };
+})();
+@@SCRIPT_CLOSE@@
+
 <title>Client Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --navy:#1F2A44;
-    --heading:#1F2A44;
-    --slate:#5B6472;
-    --gold:#B08D57;
-    --green:#2F7D5A;
-    --amber:#B7791F;
-    --red:#B23B3B;
-    --blue:#2B6CB0;
-    --teal:#2C6E6B;
-    --gray-soft:#EEF0F3;
-    --bg:#F3F4F7;
-    --card:#FFFFFF;
-    --border:#E3E6EA;
-    --text:#1A1F2B;
-    --text-soft:#6B7280;
-    --input-bg:#FCFCFD;
-    --focus-ring: rgba(176,141,87,0.38);
-    --font-display:'Space Grotesk', 'Arial Narrow', sans-serif;
-    --font-body:'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono:'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
-  }
-  html[data-theme="dark"]{
-    --heading:#D7E0F2;
-    --slate:#9AA3B7;
-    --gray-soft:#232838;
-    --bg:#11151D;
-    --card:#1A1F2B;
-    --border:#2B3242;
-    --text:#E7E9EE;
-    --text-soft:#8A93A6;
-    --input-bg:#20263349;
+    --navy:#0f172a;
+    --heading:#f1f5f9;
+    --slate:#94a3b8;
+    --gold:#2563eb;
+    --green:#22c55e;
+    --amber:#f59e0b;
+    --red:#ef4444;
+    --blue:#2563eb;
+    --teal:#0891b2;
+    --gray-soft:#334155;
+    --bg:#0f172a;
+    --card:#1e293b;
+    --border:#334155;
+    --text:#f1f5f9;
+    --text-soft:#94a3b8;
+    --input-bg:#1e293b;
+    --focus-ring: rgba(37,108,235,0.38);
+    --font-display:'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-body:'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
   }
   html{ transition:background .2s; }
   body{ transition:background .2s, color .2s; }
@@ -1606,6 +1645,7 @@
   .subline{ font-size:13px; color:var(--text-soft); margin-top:6px; }
   .subline .sep{ color:var(--border); margin:0 2px; }
   .save-indicator{ font-family:var(--font-mono); font-size:12px; color:var(--text-soft); display:inline-flex; align-items:center; gap:6px; }
+  .save-indicator .dot.error{ background:#ef4444 !important; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
   .topbar-right{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
   .theme-toggle{
     font-family:var(--font-body); font-size:12px; font-weight:600; padding:7px 13px; border-radius:999px;
@@ -1982,7 +2022,7 @@ async function loadData(){
       state.clients = (parsed.clients || []).map(normalizeClient);
       state.order = parsed.order || state.clients.map(c=>c.id);
       state.sortMode = parsed.sortMode || 'alpha';
-      state.theme = parsed.theme || 'dark';
+      state.theme = 'dark';
       state.sops = (parsed.sops || DEFAULT_SOPS).map(normalizeSop);
     } else {
       state.clients = DEFAULT_CLIENTS.map(normalizeClient);
@@ -2019,9 +2059,17 @@ function scheduleSave(){
 }
 
 async function persist(){
+  const ind = document.getElementById('save-dot');
+  const lbl = document.querySelector('.save-indicator');
   try{
     await window.storage.set(STORAGE_KEY, JSON.stringify({clients: state.clients, order: state.order, sortMode: state.sortMode, theme: state.theme, sops: state.sops}), false);
-  }catch(e){ console.error('Save failed', e); }
+    if(ind){ ind.classList.remove('error'); }
+    if(lbl){ lbl.lastChild.nodeValue = ' Synced to cloud'; }
+  }catch(e){
+    if(ind){ ind.classList.add('error'); ind.title = 'Save failed: ' + (e && e.message || e); }
+    if(lbl){ lbl.lastChild.nodeValue = ' Save failed'; }
+    throw e;
+  }
 }
 
 function uid(){ return 'c_' + Math.random().toString(36).slice(2,9); }
@@ -2204,11 +2252,10 @@ function render(){
       <div>
         <p class="eyebrow">ORGANIC SOCIAL OPERATIONS</p>
         <h1>Client Dashboard</h1>
-        <p class="subline">Live <span class="sep">|</span> Editable <span class="sep">|</span> Autosaves to this artifact <span class="sep">|</span> <span class="save-indicator"><span class="dot" id="save-dot"></span> Saved locally</span></p>
+        <p class="subline">Live <span class="sep">|</span> Editable <span class="sep">|</span> Firebase-synced <span class="sep">|</span> <span class="save-indicator"><span class="dot" id="save-dot"></span> Synced to cloud</span></p>
       </div>
       <div class="topbar-right">
-        <button class="theme-toggle" id="theme-toggle">${state.theme==='dark' ? '☀️ Light mode' : '🌙 Dark mode'}</button>
-      </div>
+        </div>
     </div>
 
     <div class="pulse">
@@ -2260,13 +2307,6 @@ function render(){
     chip.onclick = ()=>{ state.filterStatus = chip.dataset.filter; render(); };
   });
   document.getElementById('add-client-btn').onclick = addClient;
-  document.getElementById('theme-toggle').onclick = ()=>{
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', state.theme);
-    scheduleSave();
-    render();
-  };
-
   document.querySelectorAll('.client-head').forEach(head=>{
     head.onclick = ()=> openClientPanel(head.dataset.toggle);
   });
@@ -2637,23 +2677,44 @@ loadData();
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Diginauts Creative</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">@@SCRIPT_CLOSE@@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">@@SCRIPT_CLOSE@@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js">@@SCRIPT_CLOSE@@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js">@@SCRIPT_CLOSE@@
 <style>
-  html, body { margin:0; padding:0; height:100%; background:#0d0f14; color:#e2e6f0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  html, body { margin:0; padding:0; height:100%; background:#0f172a; color:#f1f5f9;
+    font-family:'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
   #root { min-height:100vh; }
-  #boot-status { position:fixed; top:12px; right:14px; z-index:9999; font-size:11px; color:#6e7a94; display:flex; align-items:center; gap:6px; opacity:.75; }
-  #boot-status .dot { width:7px; height:7px; border-radius:50%; background:#6e7a94; }
+  #boot-status { position:fixed; top:12px; right:14px; z-index:9999;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:6px; opacity:.85; }
+  #boot-status .dot { width:7px; height:7px; border-radius:50%; background:#64748b; }
   #boot-status.ok .dot { background:#22c55e; }
-  #boot-status.err .dot { background:#ef4444; color:#ef4444; }
+  #boot-status.err .dot { background:#ef4444; }
   #boot-status.err { color:#ef4444; }
+  #boot-error { display:none; position:fixed; inset:0; z-index:10000; background:#0f172a;
+    align-items:center; justify-content:center; padding:24px;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif; color:#f1f5f9; }
+  #boot-error.show { display:flex; }
+  #boot-error .box { max-width:420px; text-align:center; }
+  #boot-error h2 { margin:0 0 8px; font-size:18px; font-weight:600; color:#f1f5f9; }
+  #boot-error p { margin:0 0 18px; font-size:13px; color:#94a3b8; line-height:1.6; }
+  #boot-error button { background:#2563eb; color:#fff; border:none; border-radius:8px;
+    padding:9px 20px; font-size:13px; font-weight:600; cursor:pointer;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif; }
+  #boot-error button:hover { background:#3b82f6; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <div id="boot-status"><span class="dot"></span><span id="boot-status-text">Connecting…</span></div>
+<div id="boot-error"><div class="box">
+  <h2>Cloud sync unavailable</h2>
+  <p id="boot-error-msg">Couldn't reach Firebase. This tab needs a cloud connection to load your data.</p>
+  <button onclick="location.reload()">Retry</button>
+</div></div>
 <script type="text/plain" id="app-code">
 const {
   useState,
@@ -2680,20 +2741,20 @@ const LIGHT = {
 };
 const DARK = {
   mode: "dark",
-  bg: "#0d0f14",
-  surface: "#14171f",
-  surface2: "#1c202c",
-  border: "#252a38",
-  border2: "#2e3448",
-  text: "#e2e6f0",
-  text2: "#b0b8cc",
-  text3: "#6e7a94",
-  text4: "#454d62",
-  accent: "#4f7fff",
-  pink: "#ff2d78",
-  inputBg: "#1c202c",
-  cardShadow: "0 1px 4px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2)",
-  topbar: "rgba(13,15,20,.92)"
+  bg: "#0f172a",
+  surface: "#1e293b",
+  surface2: "#334155",
+  border: "#334155",
+  border2: "#475569",
+  text: "#f1f5f9",
+  text2: "#cbd5e1",
+  text3: "#94a3b8",
+  text4: "#64748b",
+  accent: "#2563eb",
+  pink: "#ec4899",
+  inputBg: "#1e293b",
+  cardShadow: "0 1px 3px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.25)",
+  topbar: "rgba(15,23,42,.92)"
 };
 
 // action:true means it's a one-shot action in the dropdown, not a real status value
@@ -7215,77 +7276,67 @@ root.render(React.createElement(App));
   var status = document.getElementById('boot-status');
   var statusText = document.getElementById('boot-status-text');
   function setStatus(cls, msg){ status.className = cls; statusText.textContent = msg; }
+  function showError(msg){
+    document.getElementById('boot-error-msg').textContent = msg;
+    document.getElementById('boot-error').classList.add('show');
+  }
 
   function runApp(){
     var code = document.getElementById('app-code').textContent;
-    var s = document.createElement('script');
-    s.textContent = code;
+    var s = document.createElement('script'); s.textContent = code;
     document.body.appendChild(s);
   }
 
-  try {
-    firebase.initializeApp({
+  try { firebase.initializeApp({
     apiKey: "AIzaSyAAvxcoVE8ZpvG4OC5VKuNnfzuLxidL83U",
     authDomain: "points-dashboard-78c0b.firebaseapp.com",
     projectId: "points-dashboard-78c0b",
     storageBucket: "points-dashboard-78c0b.firebasestorage.app",
     messagingSenderId: "456742475224",
     appId: "1:456742475224:web:7b73cf082db54daa488ead"
-  });
-  } catch(e){ /* already initialized */ }
+  }); } catch(e){}
   var db = firebase.firestore();
   var docRef = db.collection('artifacts').doc('client-map-master-v1')
                  .collection('public').doc('data')
                  .collection('creative').doc('state');
 
   var saveTimer = null;
-  var lastSent = {};
-
   function attachShim(){
     var origSet = localStorage.setItem.bind(localStorage);
     localStorage.setItem = function(k, v){
       origSet(k, v);
       if (SYNC_KEYS.indexOf(k) === -1) return;
-      lastSent[k] = v;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(function(){
         setStatus('', 'Saving…');
         var payload = { updatedAt: Date.now() };
         for (var i=0; i<SYNC_KEYS.length; i++){
-          var kk = SYNC_KEYS[i];
-          var val = localStorage.getItem(kk);
-          if (val !== null) payload[kk] = val;
+          var val = localStorage.getItem(SYNC_KEYS[i]);
+          if (val !== null) payload[SYNC_KEYS[i]] = val;
         }
         docRef.set(payload, { merge:true })
-              .then(function(){ setStatus('ok', 'Synced'); })
-              .catch(function(err){
-                console.error('Firestore save failed', err);
-                setStatus('err', 'Save error');
-              });
+          .then(function(){ setStatus('ok', 'Synced'); })
+          .catch(function(err){ setStatus('err', 'Save failed'); });
       }, 600);
     };
   }
 
   setStatus('', 'Loading from cloud…');
   docRef.get().then(function(snap){
+    // Clear any stale localStorage first, then hydrate ONLY from Firebase
+    for (var i=0; i<SYNC_KEYS.length; i++){ localStorage.removeItem(SYNC_KEYS[i]); }
     if (snap.exists){
       var data = snap.data() || {};
-      for (var i=0; i<SYNC_KEYS.length; i++){
-        var kk = SYNC_KEYS[i];
-        if (typeof data[kk] === 'string') {
-          // Use the raw setter (shim not yet installed) so we don't fire a write-back
-          localStorage.setItem(kk, data[kk]);
-        }
+      for (var j=0; j<SYNC_KEYS.length; j++){
+        var kk = SYNC_KEYS[j];
+        if (typeof data[kk] === 'string') localStorage.setItem(kk, data[kk]);
       }
     }
     attachShim();
     setStatus('ok', 'Synced');
     runApp();
   }).catch(function(err){
-    console.error('Firestore load failed', err);
-    setStatus('err', 'Offline — local only');
-    attachShim(); // still mirror writes; they'll fail but won't block the app
-    runApp();
+    showError('Couldn\'t reach Firebase: ' + (err && err.message || err));
   });
 })();
 @@SCRIPT_CLOSE@@
@@ -7298,23 +7349,44 @@ root.render(React.createElement(App));
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Diginauts Tech</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">@@SCRIPT_CLOSE@@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">@@SCRIPT_CLOSE@@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js">@@SCRIPT_CLOSE@@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js">@@SCRIPT_CLOSE@@
 <style>
-  html, body { margin:0; padding:0; height:100%; background:#0d0f14; color:#e2e6f0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  html, body { margin:0; padding:0; height:100%; background:#0f172a; color:#f1f5f9;
+    font-family:'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
   #root { min-height:100vh; }
-  #boot-status { position:fixed; top:12px; right:14px; z-index:9999; font-size:11px; color:#6e7a94; display:flex; align-items:center; gap:6px; opacity:.75; }
-  #boot-status .dot { width:7px; height:7px; border-radius:50%; background:#6e7a94; }
+  #boot-status { position:fixed; top:12px; right:14px; z-index:9999;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:6px; opacity:.85; }
+  #boot-status .dot { width:7px; height:7px; border-radius:50%; background:#64748b; }
   #boot-status.ok .dot { background:#22c55e; }
-  #boot-status.err .dot { background:#ef4444; color:#ef4444; }
+  #boot-status.err .dot { background:#ef4444; }
   #boot-status.err { color:#ef4444; }
+  #boot-error { display:none; position:fixed; inset:0; z-index:10000; background:#0f172a;
+    align-items:center; justify-content:center; padding:24px;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif; color:#f1f5f9; }
+  #boot-error.show { display:flex; }
+  #boot-error .box { max-width:420px; text-align:center; }
+  #boot-error h2 { margin:0 0 8px; font-size:18px; font-weight:600; color:#f1f5f9; }
+  #boot-error p { margin:0 0 18px; font-size:13px; color:#94a3b8; line-height:1.6; }
+  #boot-error button { background:#2563eb; color:#fff; border:none; border-radius:8px;
+    padding:9px 20px; font-size:13px; font-weight:600; cursor:pointer;
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif; }
+  #boot-error button:hover { background:#3b82f6; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <div id="boot-status"><span class="dot"></span><span id="boot-status-text">Connecting…</span></div>
+<div id="boot-error"><div class="box">
+  <h2>Cloud sync unavailable</h2>
+  <p id="boot-error-msg">Couldn't reach Firebase. This tab needs a cloud connection to load your data.</p>
+  <button onclick="location.reload()">Retry</button>
+</div></div>
 <script type="text/plain" id="app-code">
 const {
   useState,
@@ -7347,20 +7419,20 @@ const LIGHT = {
 };
 const DARK = {
   mode: "dark",
-  bg: "#0d0f14",
-  surface: "#14171f",
-  surface2: "#1c202c",
-  border: "#252a38",
-  border2: "#2e3448",
-  text: "#e2e6f0",
-  text2: "#b0b8cc",
-  text3: "#6e7a94",
-  text4: "#454d62",
-  accent: "#4f7fff",
-  pink: "#ff2d78",
-  inputBg: "#1c202c",
-  cardShadow: "0 1px 4px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2)",
-  topbar: "rgba(13,15,20,.92)"
+  bg: "#0f172a",
+  surface: "#1e293b",
+  surface2: "#334155",
+  border: "#334155",
+  border2: "#475569",
+  text: "#f1f5f9",
+  text2: "#cbd5e1",
+  text3: "#94a3b8",
+  text4: "#64748b",
+  accent: "#2563eb",
+  pink: "#ec4899",
+  inputBg: "#1e293b",
+  cardShadow: "0 1px 3px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.25)",
+  topbar: "rgba(15,23,42,.92)"
 };
 const STATUSES = [{
   key: "urgent",
@@ -13015,77 +13087,67 @@ root.render(React.createElement(App));
   var status = document.getElementById('boot-status');
   var statusText = document.getElementById('boot-status-text');
   function setStatus(cls, msg){ status.className = cls; statusText.textContent = msg; }
+  function showError(msg){
+    document.getElementById('boot-error-msg').textContent = msg;
+    document.getElementById('boot-error').classList.add('show');
+  }
 
   function runApp(){
     var code = document.getElementById('app-code').textContent;
-    var s = document.createElement('script');
-    s.textContent = code;
+    var s = document.createElement('script'); s.textContent = code;
     document.body.appendChild(s);
   }
 
-  try {
-    firebase.initializeApp({
+  try { firebase.initializeApp({
     apiKey: "AIzaSyAAvxcoVE8ZpvG4OC5VKuNnfzuLxidL83U",
     authDomain: "points-dashboard-78c0b.firebaseapp.com",
     projectId: "points-dashboard-78c0b",
     storageBucket: "points-dashboard-78c0b.firebasestorage.app",
     messagingSenderId: "456742475224",
     appId: "1:456742475224:web:7b73cf082db54daa488ead"
-  });
-  } catch(e){ /* already initialized */ }
+  }); } catch(e){}
   var db = firebase.firestore();
   var docRef = db.collection('artifacts').doc('client-map-master-v1')
                  .collection('public').doc('data')
                  .collection('tech').doc('state');
 
   var saveTimer = null;
-  var lastSent = {};
-
   function attachShim(){
     var origSet = localStorage.setItem.bind(localStorage);
     localStorage.setItem = function(k, v){
       origSet(k, v);
       if (SYNC_KEYS.indexOf(k) === -1) return;
-      lastSent[k] = v;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(function(){
         setStatus('', 'Saving…');
         var payload = { updatedAt: Date.now() };
         for (var i=0; i<SYNC_KEYS.length; i++){
-          var kk = SYNC_KEYS[i];
-          var val = localStorage.getItem(kk);
-          if (val !== null) payload[kk] = val;
+          var val = localStorage.getItem(SYNC_KEYS[i]);
+          if (val !== null) payload[SYNC_KEYS[i]] = val;
         }
         docRef.set(payload, { merge:true })
-              .then(function(){ setStatus('ok', 'Synced'); })
-              .catch(function(err){
-                console.error('Firestore save failed', err);
-                setStatus('err', 'Save error');
-              });
+          .then(function(){ setStatus('ok', 'Synced'); })
+          .catch(function(err){ setStatus('err', 'Save failed'); });
       }, 600);
     };
   }
 
   setStatus('', 'Loading from cloud…');
   docRef.get().then(function(snap){
+    // Clear any stale localStorage first, then hydrate ONLY from Firebase
+    for (var i=0; i<SYNC_KEYS.length; i++){ localStorage.removeItem(SYNC_KEYS[i]); }
     if (snap.exists){
       var data = snap.data() || {};
-      for (var i=0; i<SYNC_KEYS.length; i++){
-        var kk = SYNC_KEYS[i];
-        if (typeof data[kk] === 'string') {
-          // Use the raw setter (shim not yet installed) so we don't fire a write-back
-          localStorage.setItem(kk, data[kk]);
-        }
+      for (var j=0; j<SYNC_KEYS.length; j++){
+        var kk = SYNC_KEYS[j];
+        if (typeof data[kk] === 'string') localStorage.setItem(kk, data[kk]);
       }
     }
     attachShim();
     setStatus('ok', 'Synced');
     runApp();
   }).catch(function(err){
-    console.error('Firestore load failed', err);
-    setStatus('err', 'Offline — local only');
-    attachShim(); // still mirror writes; they'll fail but won't block the app
-    runApp();
+    showError('Couldn\'t reach Firebase: ' + (err && err.message || err));
   });
 })();
 @@SCRIPT_CLOSE@@
