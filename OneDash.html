@@ -637,6 +637,7 @@ function TaskRow({task, kind, all, clients, depth=0, onOpen, onStatus, onToggleF
           {isU ? <Icon n="flag" size={12} style={{color:"#ff3b30"}}/> : isF ? <Icon n="flag" size={12} style={{color:"#ff9f0a"}}/> : <span style={{width:3,height:14,borderRadius:2,background:st.bg==="#1c1c1e"?st.text:st.bg,flexShrink:0}}/>}
           <span style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</span>
           {children.length>0 && <span title="Subtasks" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:T.text3}}><Icon n="subtask" size={12}/>{children.length}</span>}
+          {LINK_BLOCKED[task.id]>0 && <span title="Waiting on another task" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,color:"var(--warn)"}}>⛓ {LINK_BLOCKED[task.id]}</span>}
           {cmts>0 && <span title="Comments" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:T.text3}}><Icon n="comment" size={12}/>{cmts}</span>}
           <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
             {hov && <button title="Flag" onClick={openFlag} style={mini}><Icon n="flag" size={12}/></button>}
@@ -675,7 +676,87 @@ function SectionHead({title, count, right}) {
   return <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:T.text2,marginBottom:10}}>{title}{count!==undefined && <span style={{color:T.text3,fontWeight:600}}>{count}</span>}<span style={{marginLeft:"auto"}}>{right}</span></div>;
 }
 
-function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
+function ClientPicker({clients, value, onPick, onAdd, trigger}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ql = q.trim().toLowerCase();
+  const list = clients.filter(c=>!ql || c.name.toLowerCase().includes(ql));
+  const exact = clients.some(c=>c.name.trim().toLowerCase()===ql);
+  const pick = id => { onPick(id); setOpen(false); setQ(""); };
+  const add = () => { if(!ql||!onAdd) return; const id = onAdd(q.trim()); if(id) pick(id); };
+  return (
+    <div style={{position:"relative"}}>
+      {trigger(()=>setOpen(o=>!o))}
+      <Pop open={open} onClose={()=>{ setOpen(false); setQ(""); }} width={270}>
+        <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ if(list.length===1) pick(list[0].id); else if(!exact && ql) add(); } }} placeholder="Search or type a new client" style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,outline:"none",color:T.text,fontSize:13,fontFamily:"inherit",padding:"7px 10px",width:"100%",marginBottom:6}}/>
+        <div style={{maxHeight:230,overflowY:"auto"}}>
+          {list.map(c=><div key={c.id} onClick={()=>pick(c.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text,background:c.id===value?"rgba(var(--ovc),.08)":"transparent"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.06)"} onMouseLeave={e=>e.currentTarget.style.background=c.id===value?"rgba(var(--ovc),.08)":"transparent"}><span style={{width:8,height:8,borderRadius:"50%",background:c.color||T.accent,flexShrink:0}}/>{c.name}{c.id===value && <span style={{marginLeft:"auto",fontSize:11,color:T.text3}}>current</span>}</div>)}
+          {list.length===0 && !ql && <div style={{padding:"7px 10px",fontSize:12,color:T.text3}}>No clients yet.</div>}
+        </div>
+        {onAdd && ql && !exact && <div onClick={add} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginTop:4,borderTop:`1px solid ${T.border}`,cursor:"pointer",fontSize:13,fontWeight:700,color:T.text}}>+ Add client "{q.trim()}"</div>}
+      </Pop>
+    </div>
+  );
+}
+
+let LINK_BLOCKED = {};
+const LK_LABEL = {out_waiting_on:"Waiting on", in_waiting_on:"Blocking", out_related:"Related", in_related:"Related"};
+const LK_COLOR = {"Waiting on":"var(--warn)","Blocking":"var(--bad)","Related":"var(--info)"};
+const isDoneTask = (kind, t) => ["done","completed","deliver"].includes(t.status) || (KINDS[kind].hidden||[]).includes(t.status);
+function TaskLinks({kind, task, allTasks, onLink, onUnlink, onOpen}) {
+  const [adding, setAdding] = useState(false);
+  const [rel, setRel] = useState("waiting_on");
+  const [q, setQ] = useState("");
+  const find = (k,id) => allTasks.find(x=>x.kind===k && x.task.id===id);
+  const rows = [];
+  (task.links||[]).forEach(l=>{ const ref=find(l.k,l.id); if(ref) rows.push({label:LK_LABEL["out_"+l.rel], ref, rel:l.rel, dir:"out"}); });
+  allTasks.forEach(x=>{ (x.task.links||[]).forEach(l=>{ if(l.id===task.id && l.k===kind) rows.push({label:LK_LABEL["in_"+l.rel], ref:x, rel:l.rel, dir:"in"}); }); });
+  const order = ["Waiting on","Blocking","Related"];
+  rows.sort((a,b)=>order.indexOf(a.label)-order.indexOf(b.label));
+  const taken = new Set(rows.map(r=>r.ref.kind+r.ref.task.id));
+  const ql = q.trim().toLowerCase();
+  const results = allTasks.filter(x=>!(x.kind===kind&&x.task.id===task.id) && !taken.has(x.kind+x.task.id) && (!ql || (x.task.title+" "+x.client+" "+x.label).toLowerCase().includes(ql)))
+    .sort((a,b)=>(isDoneTask(a.kind,a.task)-isDoneTask(b.kind,b.task))||a.task.title.localeCompare(b.task.title)).slice(0,8);
+  const unresolved = rows.filter(r=>r.label==="Waiting on" && !isDoneTask(r.ref.kind,r.ref.task)).length;
+  return (
+    <div style={{padding:"16px 24px 18px",borderTop:`1px solid ${T.border}`}}>
+      <SectionHead title="Dependencies and links" count={rows.length||undefined} right={unresolved>0 && <span style={{fontSize:11,fontWeight:700,color:"var(--warn)"}}>Waiting on {unresolved} open</span>}/>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+        {rows.map((r,i)=>{ const x=r.ref, st=statusOf(x.kind,x.task.status), done=isDoneTask(x.kind,x.task); return (
+          <div key={i} onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.04)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.04em",textTransform:"uppercase",color:LK_COLOR[r.label],minWidth:72}}>{r.label}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:done?"line-through":"none",opacity:done?.6:1}}>{x.task.title}</div>
+              <div style={{fontSize:11,color:T.text4}}>{x.client} · {x.label}</div>
+            </div>
+            <span style={{fontSize:11,color:T.text3,display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:st.bg}}/>{st.label}</span>
+            <button title="Remove link" onClick={e=>{ e.stopPropagation(); onUnlink(r.dir==="out"?{kind,id:task.id}:{kind:x.kind,id:x.task.id}, r.dir==="out"?{k:x.kind,id:x.task.id,rel:r.rel}:{k:kind,id:task.id,rel:r.rel}); }} style={{background:"none",border:"none",color:T.text4,cursor:"pointer",fontSize:15,lineHeight:1,padding:"0 2px"}}>×</button>
+          </div>); })}
+        {!adding ? (
+          <div onClick={()=>setAdding(true)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",color:T.text3,cursor:"pointer",fontSize:13}}><Icon n="plus" size={14}/>Add dependency or link</div>
+        ) : (
+          <div style={{padding:"10px 14px"}}>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <select value={rel} onChange={e=>setRel(e.target.value)} style={{background:T.surface2,color:T.text,border:`1px solid ${T.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:"inherit"}}>
+                <option value="waiting_on">This is waiting on</option><option value="blocks">This is blocking</option><option value="related">Related to</option>
+              </select>
+              <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search any task, client or service" style={{flex:1,background:T.surface2,color:T.text,border:`1px solid ${T.border}`,borderRadius:999,padding:"5px 12px",fontSize:12.5,fontFamily:"inherit",outline:"none"}}/>
+              <button onClick={()=>{ setAdding(false); setQ(""); }} style={{background:"none",border:"none",color:T.text3,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Done</button>
+            </div>
+            {results.length===0 && <div style={{fontSize:12,color:T.text4}}>No matching tasks.</div>}
+            {results.map(x=>{ const done=isDoneTask(x.kind,x.task); return (
+              <div key={x.kind+x.task.id} onClick={()=>onLink(rel,x)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",opacity:done?.6:1}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.05)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{flex:1,minWidth:0,fontSize:12.5,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</span>
+                <span style={{fontSize:11,color:T.text4,whiteSpace:"nowrap"}}>{x.client} · {x.label}</span>
+              </div>); })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onAddClient, allTasks, onLink, onUnlink, onOpenLinked, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
   const cfg = KINDS[kind].cfg;
   const [draft, setDraft] = useState(()=>({title:"",status:"todo",assignee:"",start:"",deadline:"",priority:"normal",tags:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,...(preset||{})}));
   const t = isNew ? draft : task;
@@ -702,7 +783,7 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
       <div style={{background:T.surface,border:`1px solid ${T.border2}`,borderRadius:16,width:"100%",maxWidth:700,maxHeight:"88vh",display:"flex",flexDirection:"column",animation:"fadeIn .18s ease",boxShadow:"0 28px 80px rgba(0,0,0,.7)",overflow:"hidden"}}>
         {/* breadcrumb bar */}
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0,fontSize:12,color:T.text2}}>
-          {client && <span style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:600,color:T.text}}><span style={{width:18,height:18,borderRadius:5,background:client.color||T.accent,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff"}}>{ini(client.name)}</span>{client.name}</span>}
+          <ClientPicker clients={clients} value={t.cId} onAdd={onAddClient} onPick={id=>{ set("cId",id); if(isNew) set("parentId",null); }} trigger={tg=><button type="button" onClick={tg} title="Change client" style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"3px 10px 3px 6px",cursor:"pointer",fontFamily:"inherit",fontSize:12,color:T.text,display:"inline-flex",alignItems:"center",gap:6}}>{client ? <span style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:600,color:T.text}}><span style={{width:18,height:18,borderRadius:5,background:client.color||T.accent,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff"}}>{ini(client.name)}</span>{client.name}</span> : <span>Choose client</span>}<span style={{fontSize:9,opacity:.6}}>▼</span></button>}/>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
             {!isNew && (
               <>
@@ -768,6 +849,7 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
                 {getParents(t.cId, isNew?null:task.id).map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </PropRow></div>
+            {!isNew && allTasks && <TaskLinks kind={kind} task={task} allTasks={allTasks} onLink={(r,x)=>onLink(r,x)} onUnlink={onUnlink} onOpen={onOpenLinked}/>}
             <div style={{padding:"16px 24px 18px",borderTop:`1px solid ${T.border}`}}>
               <SectionHead title="Subtasks" count={isNew?undefined:subtasks.length}/>
               {isNew ? <div style={{fontSize:12,color:T.text3}}>Create the task first, then add subtasks.</div> : (
@@ -856,7 +938,7 @@ const NT_TEMPLATES = [
   {label:"Weekly report",title:"Weekly report",tags:["report"]}
 ];
 
-function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onClose, onCreate}) {
+function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onClose, onCreate, onAddClient}) {
   const cfg = KINDS[kind].cfg.filter(s=>!s.action && s.key!=="completed");
   const [d, setD] = useState(()=>({title:"",status:"todo",assignee:CURRENT_USER,start:"",deadline:"",priority:"normal",tags:SERVICE_TAG[kind]?[SERVICE_TAG[kind]]:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,custom:[],...(preset||{})}));
   const set = (k,v) => setD(x=>({...x,[k]:v}));
@@ -883,14 +965,9 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
     <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{background:T.surface,border:`1px solid ${T.border2}`,borderRadius:22,width:"100%",maxWidth:780,maxHeight:"92vh",display:"flex",flexDirection:"column",animation:"fadeIn .18s ease",boxShadow:"0 28px 80px rgba(0,0,0,.7)"}}>
         <div style={{display:"flex",alignItems:"center",padding:"16px 20px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-          <div style={{position:"relative"}}>
-            <button type="button" onClick={()=>togglePop("client")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:999,padding:"7px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+          <ClientPicker clients={clients} value={d.cId} onAdd={onAddClient} onPick={id=>{ set("cId",id); set("parentId",null); }} trigger={tg=><button type="button" onClick={tg} style={{display:"inline-flex",alignItems:"center",gap:8,background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:999,padding:"7px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
               <Icon n="subtask" size={14}/>{client?client.name:"Choose client"}<span style={{fontWeight:500,opacity:.6}}>· {KINDS[kind].label}</span>
-            </button>
-            <Pop open={pop==="client"} onClose={()=>setPop(null)} width={260}>
-              <div style={{maxHeight:260,overflowY:"auto"}}>{clients.map(c=>opt(c.id===d.cId,()=>{set("cId",c.id); set("parentId",null); setPop(null);},<><span style={{width:8,height:8,borderRadius:"50%",background:c.color||T.accent}}/>{c.name}</>))}</div>
-            </Pop>
-          </div>
+            </button>}/>
           <button type="button" title="Close" onClick={onClose} style={{marginLeft:"auto",width:32,height:32,borderRadius:"50%",border:`1px solid ${T.border2}`,background:"transparent",color:T.text2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon n="x" size={14}/></button>
         </div>
         <div style={{flex:1,minHeight:0,overflowY:"auto",padding:"20px 24px 8px"}}>
@@ -1788,13 +1865,13 @@ const SYNC_DOCS = {
   },
   extras: {
     coll:"creative", field:"onedash-extras-v1",
-    proj: d => J({hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
+    proj: d => J({flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
     apply: (nd, p) => {
-      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])];
+      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])]; nd.flagOrder = {...(nd.flagOrder||{}), ...(p.flagOrder||{})};
       nd.archive = [...(nd.archive||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.archive||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
       nd.deleted = [...(nd.deleted||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.deleted||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
     },
-    build: (base, d) => ({...base, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
+    build: (base, d) => ({...base, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
   },
   feedback: {
     coll:"creative", field:"onedash-feedback-v1", refetch:true,
@@ -2910,7 +2987,7 @@ function hCollect(data, kinds) {
       const days = t.deadline ? daysUntil(t.deadline) : null;
       const urgent = k==="tech" ? (t.urgent===1||t.status==="urgent") : isUrgent(t);
       const follow = k==="tech" ? t.followUp===1 : isCRFollowUp(t);
-      out.push({...t,_k:k,_client:names[t.cId]||"No client",_days:days,_urgent:urgent,_follow:follow,_overdue:days!==null&&days<0,_due7:days!==null&&days>=0&&days<=7,_waiting:t.status==="client"||t.status==="awaiting",_blocked:t.status==="blocked",_unassigned:!(t.assignee||"").trim()});
+      out.push({...t,_k:k,_client:names[t.cId]||"No client",_days:days,_urgent:urgent,_follow:follow,_overdue:days!==null&&days<0,_due7:days!==null&&days>=0&&days<=7,_waiting:t.status==="client"||t.status==="awaiting",_blocked:t.status==="blocked"||!!LINK_BLOCKED[t.id],_unassigned:!(t.assignee||"").trim()});
     });
   });
   return out;
@@ -3456,6 +3533,11 @@ function App() {
   const boardClients = isSocialBoard ? socialBoardClients : data.clients;
   const boardActiveId = isSocialBoard ? ((socialBoardClients.find(c=>c.id===socialActiveId)||socialBoardClients[0]||{}).id) : activeId;
 
+  // Dependencies and links across every client and service
+  const allTasksFlat = () => ["creative","tech","ppc","social"].flatMap(k=>{ const names={}; ((k==="social"?data.social.clients:data.clients)||[]).forEach(c=>{names[c.id]=c.name;}); return listOf(k).map(t=>({kind:k,task:t,client:names[t.cId]||"No client",label:({creative:"Creative",tech:"Technical",ppc:"PPC",social:"Social"})[k]})); });
+  { const all = allTasksFlat(), byId = {}; all.forEach(x=>{ byId[x.kind+x.task.id]=x; }); const bm = {}; all.forEach(x=>{ const n=(x.task.links||[]).filter(l=>l.rel==="waiting_on" && byId[l.k+l.id] && !isDoneTask(l.k,byId[l.k+l.id].task)).length; if(n && !isDoneTask(x.kind,x.task)) bm[x.task.id]=n; }); LINK_BLOCKED = bm; }
+  const linkTask = (fk, fid, rel, tk, tid) => upd(d=>{ const put=(k1,id1,k2,id2,r)=>{ const t=(d[KINDS[k1].coll]||[]).find(x=>x.id===id1); if(!t) return; t.links=t.links||[]; if(!t.links.some(l=>l.id===id2&&l.k===k2&&l.rel===r)) t.links.push({k:k2,id:id2,rel:r}); }; if(rel==="blocks") put(tk,tid,fk,fid,"waiting_on"); else put(fk,fid,tk,tid,rel); });
+  const unlinkTask = (from, l) => upd(d=>{ const t=(d[KINDS[from.kind].coll]||[]).find(x=>x.id===from.id); if(t) t.links=(t.links||[]).filter(x=>!(x.id===l.id&&x.k===l.k&&x.rel===l.rel)); });
   // Flags
   const crUrgent = visibleOf("creative").filter(isUrgent);
   const crFollow = visibleOf("creative").filter(isCRFollowUp);
@@ -3484,7 +3566,15 @@ function App() {
       if (kind==="tech") { if(next==="review"||next==="awaiting") t.followUp=1; if(next==="urgent") t.urgent=1; }
     }
   });
-  const patchTask = (kind, id, patch) => upd(d=>{ const t=(d[KINDS[kind].coll]||[]).find(x=>x.id===id); if(t) Object.assign(t,patch); });
+  const patchTask = (kind, id, patch) => upd(d=>{ const t=(d[KINDS[kind].coll]||[]).find(x=>x.id===id); if(t) Object.assign(t,patch); if(t && patch.cId){ t.parentId = patch.parentId!==undefined ? patch.parentId : null; (d[KINDS[kind].coll]||[]).forEach(x=>{ if(x.parentId===id) x.cId = patch.cId; }); } });
+  const addClientQuick = (kind, name) => {
+    const id = (kind==="social"?"sm_":"")+uid(); const cols = ["#4f7fff","#30d158","#ff9f0a","#bf5af2","#ff3b30","#32ade6"];
+    upd(d=>{
+      if (kind==="social") d.social.clients.push(normalizeSocialClient({id,name,platformsList:[],contact:"",calendarLink:"",finalPost:"",nextPost:"",cadence:"",status:"Active",postsWeek:0,postsMonth:0,boosted:"Not specified",boostedNote:"",origin:"onedash"}));
+      else d.clients.push({id,origin:"onedash",name,tier:"3",priority:99,color:cols[d.clients.length%cols.length],cat:"other",region:"ZA",resources:{...EMPTY_RESOURCES},health:"unknown",tech:{...EMPTY_CLIENT_TECH}});
+    });
+    return id;
+  };
   const createdKind = useRef(null);
   const createTask = (kind0, f) => {
     if (!f.title || !f.title.trim()) return null;
@@ -3665,6 +3755,24 @@ function App() {
   // ── Sidebar ──────────────────────────────────────────────────────────────
   const tabBtn = (active) => ({background:active?"rgba(var(--ovc),.1)":"transparent",border:`1px solid ${active?T.border2:T.border}`,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,color:active?"var(--inv)":T.text2,fontFamily:"inherit"});
 
+  const [flagDrag, setFlagDrag] = useState(null);
+  const [flagOver, setFlagOver] = useState(null);
+  const orderedFlags = (key, list) => { const o=(data.flagOrder||{})[key]||[]; const rank=id=>{ const i=o.indexOf(id); return i<0?1e6:i; }; return [...list].sort((x,y)=>rank(x.id)-rank(y.id)); };
+  const dropFlag = (key, list, targetId, pos) => {
+    if (!flagDrag || flagDrag.key!==key || flagDrag.id===targetId) return;
+    const ids = orderedFlags(key,list).map(x=>x.id).filter(id=>id!==flagDrag.id);
+    const at = ids.indexOf(targetId); ids.splice(at<0?ids.length:(pos==="after"?at+1:at),0,flagDrag.id);
+    upd(d=>{ d.flagOrder = {...(d.flagOrder||{}), [key]:ids}; });
+  };
+  const flagItem = (key, list, i, node) => {
+    const dragging = flagDrag && flagDrag.id===i.id, over = flagOver && flagOver.id===i.id && !dragging;
+    return <div key={i.id} draggable title="Drag to reorder"
+      onDragStart={e=>{ setFlagDrag({key,id:i.id}); e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",i.id); }catch(err){} }}
+      onDragOver={e=>{ if(!flagDrag||flagDrag.key!==key) return; e.preventDefault(); const r=e.currentTarget.getBoundingClientRect(); const pos=e.clientY>r.top+r.height/2?"after":"before"; if(!flagOver||flagOver.id!==i.id||flagOver.pos!==pos) setFlagOver({id:i.id,pos}); }}
+      onDrop={e=>{ e.preventDefault(); dropFlag(key,list,i.id,flagOver&&flagOver.pos); setFlagDrag(null); setFlagOver(null); }}
+      onDragEnd={()=>{ setFlagDrag(null); setFlagOver(null); }}
+      style={{opacity:dragging?.4:1,cursor:"grab",borderTop:over&&flagOver.pos==="before"?"2px solid var(--info)":"2px solid transparent",borderBottom:over&&flagOver.pos==="after"?"2px solid var(--info)":"2px solid transparent"}}>{node}</div>;
+  };
   const renderFlags = () => {
     if (clientTab==="social") return (
       <>
@@ -3678,11 +3786,11 @@ function App() {
         </SidebarGroup>
         <SidebarGroup label="SM Urgent tasks" color="#ff3b30" count={smUrgent.length}>
           {smUrgent.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {smUrgent.map(i=><SidebarItem key={i.id} item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>)}
+          {orderedFlags("social:urgent",smUrgent).map(i=>flagItem("social:urgent",smUrgent,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>))}
         </SidebarGroup>
         <SidebarGroup label="SM Follow-up tasks" color="#ff9f0a" count={smFollow.length}>
           {smFollow.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {smFollow.map(i=><SidebarItem key={i.id} item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>)}
+          {orderedFlags("social:follow",smFollow).map(i=>flagItem("social:follow",smFollow,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>))}
         </SidebarGroup>
       </>
     );
@@ -3694,11 +3802,11 @@ function App() {
       <>
         <SidebarGroup label={`${pre} Urgent`} color="#ff3b30" count={urg.length}>
           {urg.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {urg.map(i=><SidebarItem key={i.id} item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>)}
+          {orderedFlags(k+":urgent",urg).map(i=>flagItem(k+":urgent",urg,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>))}
         </SidebarGroup>
         <SidebarGroup label={`${pre} Follow-up`} color="#ff9f0a" count={fol.length}>
           {fol.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {fol.map(i=><SidebarItem key={i.id} item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>)}
+          {orderedFlags(k+":follow",fol).map(i=>flagItem(k+":follow",fol,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>))}
         </SidebarGroup>
       </>
     );
@@ -4247,9 +4355,9 @@ function App() {
     <>
       {cardCtx && (()=>{
         const kind = cardCtx.kind;
-        const common = {kind,clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
+        const common = {kind,onAddClient:name=>addClientQuick(kind,name),clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
         if (cardCtx.isNew) {
-          return <NewTaskDialog key="new" kind={kind} preset={cardCtx.preset} clients={isSocialBoard?socialBoardClients:sortedClients} people={people} activeId={boardActiveId} getParents={getParents(kind)} onClose={()=>setCardCtx(null)}
+          return <NewTaskDialog key="new" kind={kind} preset={cardCtx.preset} clients={isSocialBoard?socialBoardClients:sortedClients} people={people} activeId={boardActiveId} getParents={getParents(kind)} onAddClient={name=>addClientQuick(kind,name)} onClose={()=>setCardCtx(null)}
             onCreate={(f,mode)=>{ const id=createTask(kind,f); if(!id) return; const k=createdKind.current||kind; if(mode==="open") setCardCtx({kind:k,id}); else if(mode==="close") setCardCtx(null); }}/>;
         }
         const task = listOf(kind).find(x=>x.id===cardCtx.id);
@@ -4262,6 +4370,7 @@ function App() {
           onDelete={id=>{ deleteTask(kind,id); }}
           onArchive={id=>changeStatus(kind,id,"archive")}
           onOpenTask={s=>setCardCtx({kind,id:s.id})}
+          allTasks={allTasksFlat()} onLink={(rel,x)=>linkTask(kind,task.id,rel,x.kind,x.task.id)} onUnlink={unlinkTask} onOpenLinked={(k,id)=>setCardCtx({kind:k,id})}
           onAddSub={title=>createTask(kind,{title,parentId:task.id,cId:task.cId,type:task.type,section:task.section,status:"todo"})}
           onAddComment={(id,text)=>addComment(kind,id,text)}
           onDeleteComment={(id,cid)=>deleteComment(kind,id,cid)}/>;
