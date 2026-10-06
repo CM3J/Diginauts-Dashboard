@@ -14,6 +14,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root { --bg:#0a0a0a; --surface:#18181b; --surface2:#1f1f23; --border:#27272a; --border2:#3f3f46; --text:#f4f4f5; --text2:#a1a1aa; --text3:#71717a; --text4:#52525b; --ovc:255,255,255; --inv:#f4f4f5; --inv-fg:#18181b; color-scheme: dark; }
 :root[data-od=light] { --bg:#F4F4F3; --surface:#FFFFFF; --surface2:#F0F0EF; --border:#DADAD8; --border2:#C6C6C3; --text:#111111; --text2:#3F3F3D; --text3:#6B6B6B; --text4:#8F8F8C; --ovc:0,0,0; --inv:#111111; --inv-fg:#ffffff; --ok:#1B7A43; --warn:#A35F00; --bad:#C23B2E; --info:#2F5FE0; color-scheme: light; }
+:root[data-od=light][data-ctab=social] { --text2:#2A2A28; --text3:#4A4A47; --text4:#62625F; --border:#C9C9C5; --border2:#A9A9A4; }
 :root { --ok:#30d158; --warn:#ff9f0a; --bad:#ff6b6b; --info:#4f7fff; }
 :root[data-od=light] [style^="color: rgb(48, 209, 88)"],:root[data-od=light] [style*="; color: rgb(48, 209, 88)"]{color:#1B7A43 !important}
 :root[data-od=light] [style^="color: rgb(52, 199, 89)"],:root[data-od=light] [style*="; color: rgb(52, 199, 89)"]{color:#1B7A43 !important}
@@ -413,7 +414,13 @@ function asg(t) {
 }
 const wch = t => (t&&Array.isArray(t.watchers))?t.watchers:[];
 // Meeting flags: a task is flagged by its flag field or, for urgent / review style statuses, by its status. -1 means switched off by hand.
-const flagU = t => t.urgent===1 || (t.urgent!==-1 && t.status==="urgent");
+const flagU = t => t.urgent===1 || (t.urgent!==-1 && (t.status==="urgent" || t.priority==="urgent"));
+// The Urgent priority and the Urgent meeting flag are one thing: the priority shown follows the flag
+const prio = t => flagU(t) ? "urgent" : (t.priority==="urgent" ? "high" : (t.priority||"normal"));
+// Tags decide which dashboards show a task. A task always stays on its own dashboard and also appears on every dashboard its tags point to.
+const TAG_DASH = {"creative":["creative"],"social media":["creative","social"],"website":["creative"],"technical":["tech"],"crm":["tech"],"ppc":["ppc"],"ai app build":["tech"]};
+const dashKindsFromTags = tags => { const s=[]; (tags||[]).forEach(g=>(TAG_DASH[String(g).toLowerCase()]||[]).forEach(k=>{ if(!s.includes(k)) s.push(k); })); return s; };
+const dashKinds = (nk,t) => { const s=[nk]; dashKindsFromTags(t.tags).forEach(k=>{ if(!s.includes(k)) s.push(k); }); return s; };
 const flagF = (kind,t) => t.followUp===1 || (t.followUp!==-1 && kind!=="tech" && isCRFollowUp(t));
 const flagNext = (on, derived) => on ? (derived?-1:0) : 1;
 const safeUrl = u => { u=(u||"").trim(); if(!u) return ""; return /^https?:\/\//i.test(u)?u:"https://"+u.replace(/^\/+/,""); };
@@ -422,51 +429,65 @@ const FLAG_F_LABEL = "Follow-up / Discuss";
 function AvatarStack({names, size=18}) {
   return <span style={{display:"inline-flex",alignItems:"center"}}>{names.slice(0,4).map((n,i)=><span key={n} style={{marginLeft:i?-5:0,display:"inline-flex",boxShadow:`0 0 0 2px ${T.surface}`,borderRadius:"50%"}}><Avatar name={n} size={size}/></span>)}{names.length>4 && <span style={{fontSize:10,color:T.text3,marginLeft:4}}>+{names.length-4}</span>}</span>;
 }
-function PeoplePicker({value, onChange, people, onAddPerson, addLabel="Add", inline}) {
+function PeoplePicker({value, onChange, people, onAddPerson, addLabel="Add"}) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [nn, setNn] = useState("");
+  const btn = useRef(); const pan = useRef();
   const sel = value||[];
   const toggle = p => onChange(sel.includes(p)?sel.filter(x=>x!==p):[...sel,p]);
   const ql = q.trim().toLowerCase();
   const list = people.filter(p=>!ql||p.toLowerCase().includes(ql));
-  const addNew = () => { const n=nn.trim().replace(/\s+/g," "); if(!n) return; const canon=people.find(p=>p.toLowerCase()===n.toLowerCase()); const name=canon||n; if(!canon && onAddPerson) onAddPerson(name); if(!sel.includes(name)) onChange([...sel,name]); setNn(""); setAdding(false); };
   const close = () => { setOpen(false); setAdding(false); setQ(""); setNn(""); };
-  const inp = {width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,outline:"none",color:T.text,fontSize:12.5,fontFamily:"inherit",padding:"6px 9px"};
-  const panel = (<>
-        <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search team" style={{...inp,marginBottom:5}}/>
-        <div style={{maxHeight:250,overflowY:"auto"}}>
-          {list.length===0 && <div style={{fontSize:12,color:T.text4,padding:"6px 8px"}}>No match</div>}
-          {list.map(p=>{ const on=sel.includes(p); return (
-            <div key={p} onClick={()=>toggle(p)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?"#30d158":T.border2}`,background:on?"#30d158":"transparent",color:"#0e0e0e",fontSize:11,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-              <Avatar name={p} size={20}/>{p}
-            </div>); })}
-        </div>
-        <div style={{borderTop:`1px solid ${T.border}`,marginTop:5,paddingTop:5}}>
-          {!adding ? (
-            <div onClick={()=>setAdding(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text2}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon n="plus" size={13}/>Add new person</div>
-          ) : (
-            <div style={{display:"flex",gap:5,padding:"2px"}}>
-              <input autoFocus value={nn} onChange={e=>setNn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") addNew(); if(e.key==="Escape") setAdding(false); }} placeholder="Full name, Enter" style={inp}/>
-              <button type="button" onClick={addNew} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:8,padding:"0 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Add</button>
-            </div>
-          )}
-        </div>
-  </>);
-  if (inline) return <div>{panel}</div>;
+  const openIt = () => {
+    if (open) { close(); return; }
+    const r = btn.current.getBoundingClientRect(), vh = window.innerHeight, vw = window.innerWidth, W = 250;
+    const below = vh-r.bottom-14, above = r.top-14, up = below<330 && above>below;
+    setPos({left:Math.min(Math.max(8,r.right-W),vw-W-8), top:up?undefined:r.bottom+6, bottom:up?vh-r.top+6:undefined, maxH:Math.max(180,Math.min(420,up?above:below)), W});
+    setOpen(true);
+  };
+  useEffect(()=>{
+    if (!open) return;
+    const h = e => { if ((pan.current&&pan.current.contains(e.target)) || (btn.current&&btn.current.contains(e.target))) return; close(); };
+    const k = e => { if (e.key==="Escape") { e.stopPropagation(); close(); } };
+    document.addEventListener("mousedown",h); window.addEventListener("keydown",k,true);
+    return ()=>{ document.removeEventListener("mousedown",h); window.removeEventListener("keydown",k,true); };
+  },[open]);
+  const addNew = () => { const n=nn.trim().replace(/\s+/g," "); if(!n) return; const canon=people.find(p=>p.toLowerCase()===n.toLowerCase()); const name=canon||n; if(!canon && onAddPerson) onAddPerson(name); if(!sel.includes(name)) onChange([...sel,name]); setNn(""); setAdding(false); };
+  const inp = {width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,outline:"none",color:T.text,fontSize:12.5,fontFamily:"inherit",padding:"6px 9px",boxSizing:"border-box"};
+  const panel = open && pos && ReactDOM.createPortal(
+    <div ref={pan} style={{position:"fixed",left:pos.left,top:pos.top,bottom:pos.bottom,width:pos.W,maxHeight:pos.maxH,display:"flex",flexDirection:"column",zIndex:1300,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:12,padding:6,boxShadow:"0 12px 36px rgba(0,0,0,.65)",boxSizing:"border-box"}}>
+      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search team" style={{...inp,marginBottom:5,flexShrink:0}}/>
+      <div style={{flex:1,minHeight:0,overflowY:"auto"}}>
+        {list.length===0 && <div style={{fontSize:12,color:T.text4,padding:"6px 8px"}}>No match</div>}
+        {list.map(p=>{ const on=sel.includes(p); return (
+          <div key={p} onClick={()=>toggle(p)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?"#30d158":T.border2}`,background:on?"#30d158":"transparent",color:"#0e0e0e",fontSize:11,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"\u2713":""}</span>
+            <Avatar name={p} size={20}/>{p}
+          </div>); })}
+      </div>
+      <div style={{borderTop:`1px solid ${T.border}`,marginTop:5,paddingTop:5,flexShrink:0}}>
+        {!adding ? (
+          <div onClick={()=>setAdding(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text2}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon n="plus" size={13}/>Add new person</div>
+        ) : (
+          <div style={{display:"flex",gap:5,padding:"2px"}}>
+            <input autoFocus value={nn} onChange={e=>setNn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") addNew(); }} placeholder="Full name, Enter" style={inp}/>
+            <button type="button" onClick={addNew} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:8,padding:"0 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Add</button>
+          </div>
+        )}
+      </div>
+    </div>, document.body);
   return (
-    <span style={{position:"relative",display:"inline-flex",alignItems:"center",flexWrap:"wrap",gap:5}}>
+    <span style={{display:"inline-flex",alignItems:"center",flexWrap:"wrap",gap:5}}>
       {sel.map(p=>{ const known=people.includes(p); return (
         <span key={p} title={known?p:"Not in the team list. Remove it or pick a team member."} style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(var(--ovc),.07)",border:`1px ${known?"solid":"dashed"} ${known?T.border:"var(--warn)"}`,borderRadius:999,padding:"2px 4px 2px 3px",fontSize:12,color:T.text}}>
           <Avatar name={p} size={17}/>{p}
           <button type="button" title="Remove" onClick={()=>toggle(p)} style={{background:"none",border:"none",color:T.text3,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 3px"}}>×</button>
         </span>); })}
-      <button type="button" onClick={()=>setOpen(o=>!o)} style={{background:"transparent",border:`1px dashed ${T.border2}`,borderRadius:999,padding:"2px 10px",fontSize:11,color:T.text3,cursor:"pointer",fontFamily:"inherit"}}>{sel.length?"+":"+ "+addLabel}</button>
-      <Pop open={open} onClose={close} width={230} align="right">
-        {panel}
-      </Pop>
+      <button ref={btn} type="button" onClick={openIt} style={{background:"transparent",border:`1px dashed ${T.border2}`,borderRadius:999,padding:"2px 10px",fontSize:11,color:T.text3,cursor:"pointer",fontFamily:"inherit"}}>{sel.length?"+":"+ "+addLabel}</button>
+      {panel}
     </span>
   );
 }
@@ -482,6 +503,7 @@ const ICONS = {
   check:"M5 12.5l4.5 4.5L19 7.5",
   plus:"M12 5v14M5 12h14",
   edit:"M4 20h4L19 9l-4-4L4 16v4M13.5 6.5l4 4",
+  star:"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
   more:"M5 12h.01M12 12h.01M19 12h.01",
   comment:"M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12",
   calendar:"M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
@@ -542,13 +564,14 @@ function Avatar({name, size=20, color}) {
   return <span title={name} style={{width:size,height:size,borderRadius:"50%",background:color||hueOf(name),color:"#fff",fontSize:Math.max(8,Math.round(size*0.42)),fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{label}</span>;
 }
 
+const LOGO_URI = "data:image/png;base64,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";
 function Logo({compact}) {
   if (compact) return <div style={{width:34,height:34,borderRadius:10,background:"var(--inv)",color:"var(--inv-fg)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Michroma',sans-serif",fontSize:15,fontWeight:400}}>d</div>;
+  const m = {WebkitMaskImage:"url("+LOGO_URI+")",maskImage:"url("+LOGO_URI+")",WebkitMaskRepeat:"no-repeat",maskRepeat:"no-repeat",WebkitMaskSize:"100% 100%",maskSize:"100% 100%"};
   return (
     <div style={{lineHeight:1}}>
-      <div style={{fontFamily:"'Michroma',sans-serif",fontSize:21,color:"var(--text)",letterSpacing:"0.01em"}}>diginauts</div>
-      <div style={{fontSize:6.5,letterSpacing:"0.34em",color:T.text2,marginTop:6,textTransform:"uppercase",fontWeight:600}}>Navigating digital space</div>
-      <div style={{fontSize:13,fontWeight:700,color:"var(--text)",letterSpacing:"-0.01em",marginTop:8}}>OneDash</div>
+      <div role="img" aria-label="diginauts, navigating digital space" style={{width:172,height:Math.round(172*119/720),background:T.text,...m}}/>
+      <div style={{fontSize:13,fontWeight:700,color:T.text,letterSpacing:"-0.01em",marginTop:8}}>OneDash</div>
     </div>
   );
 }
@@ -631,7 +654,7 @@ function HoverRow({icon, children}) {
 
 function HoverCard({task, kind, client, rect, onEnter, onLeave, onFlag, onComplete, onEdit}) {
   const st = statusOf(kind, task.status);
-  const pr = task.priority && task.priority!=="normal" ? PR[task.priority] : null;
+  const pr = prio(task)!=="normal" ? PR[prio(task)] : null;
   const comments = [...(task.comments||[])].sort((a,b)=>b.at-a.at);
   const W = 340;
   const vw = window.innerWidth, vh = window.innerHeight;
@@ -707,10 +730,11 @@ function TaskRow({task, kind, all, clients, depth=0, onOpen, onStatus, onToggleF
   return (
     <div>
       <div ref={rowRef} onMouseEnter={enter} onMouseLeave={leave} onClick={()=>{hardLeave();onOpen(task);}}
-        style={{background:isHL?"rgba(123,104,238,.12)":hov?T.surface2:T.surface,border:`1px solid ${isHL?"rgba(123,104,238,.45)":hov?T.border2:T.border}`,borderRadius:10,padding:"9px 12px",marginLeft:depth*18,marginBottom:6,transition:"background .15s,border-color .15s,opacity .2s",position:"relative",cursor:"pointer",opacity:dimmed?0.25:1}}>
+        style={{background:isHL?"rgba(123,104,238,.12)":hov?T.surface2:(isU?"rgba(255,59,48,.05)":isF?"rgba(255,159,10,.05)":T.surface),border:`1px solid ${isHL?"rgba(123,104,238,.45)":isU?"rgba(255,59,48,.6)":isF?"rgba(255,159,10,.6)":hov?T.border2:T.border}`,borderRadius:10,padding:"9px 12px",marginLeft:depth*18,marginBottom:6,transition:"background .15s,border-color .15s,opacity .2s",position:"relative",cursor:"pointer",opacity:dimmed?0.25:1}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {isU ? <Icon n="flag" size={12} style={{color:"#ff3b30"}}/> : isF ? <Icon n="flag" size={12} style={{color:"#ff9f0a"}}/> : <span style={{width:3,height:14,borderRadius:2,background:st.bg==="#1c1c1e"?st.text:st.bg,flexShrink:0}}/>}
-          <span style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</span>
+          <span title={(isU||isF)?"On the Meeting Flags list, so it may already have been discussed":undefined} style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</span>
+          {task._nk && <span title={"From the "+KINDS[task._nk].label+" dashboard (tagged for this one)"} style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",color:T.text3,border:`1px solid ${T.border2}`,borderRadius:6,padding:"0 5px"}}>{KINDS[task._nk].short}</span>}
           {children.length>0 && <span title="Subtasks" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:T.text3}}><Icon n="subtask" size={12}/>{children.length}</span>}
           {LINK_BLOCKED[task.id]>0 && <span title="Waiting on another task" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,color:"var(--warn)"}}>⛓ {LINK_BLOCKED[task.id]}</span>}
           {cmts>0 && <span title="Comments" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:T.text3}}><Icon n="comment" size={12}/>{cmts}</span>}
@@ -832,7 +856,7 @@ function TaskLinks({kind, task, allTasks, onLink, onUnlink, onOpen}) {
   );
 }
 
-function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onAddClient, allTasks, onLink, onUnlink, onOpenLinked, onAddPerson, onToggleFlag, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
+function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onAddClient, allTasks, onLink, onUnlink, onOpenLinked, onAddPerson, onToggleFlag, priorityLists, onTogglePriority, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
   const cfg = KINDS[kind].cfg;
   const [draft, setDraft] = useState(()=>({title:"",status:"todo",assignee:"",assignees:[],watchers:[],start:"",deadline:"",priority:"normal",tags:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,...(preset||{})}));
   const t = isNew ? draft : task;
@@ -843,6 +867,7 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
   const [menu, setMenu] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(true);
   const [linkPop, setLinkPop] = useState(false);
+  const [prPop, setPrPop] = useState(false);
   const [linkVal, setLinkVal] = useState("");
   const setPeople = (key,list) => { const patch = key==="assignees" ? {assignees:list, assignee:list.join(", ")} : {watchers:list}; if(isNew) setDraft(d=>({...d,...patch})); else onPatch(task.id,patch); };
   const titleRef = useRef();
@@ -861,12 +886,12 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
     <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{background:T.surface,border:`1px solid ${T.border2}`,borderRadius:16,width:"100%",maxWidth:700,maxHeight:"88vh",display:"flex",flexDirection:"column",animation:"fadeIn .18s ease",boxShadow:"0 28px 80px rgba(0,0,0,.7)",overflow:"hidden"}}>
         {/* breadcrumb bar */}
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0,fontSize:12,color:T.text2}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0,fontSize:12,color:T.text2,flexWrap:"wrap"}}>
           <ClientPicker clients={clients} value={t.cId} onAdd={onAddClient} onPick={id=>{ set("cId",id); if(isNew) set("parentId",null); }} trigger={tg=><button type="button" onClick={tg} title="Change client" style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"3px 10px 3px 6px",cursor:"pointer",fontFamily:"inherit",fontSize:12,color:T.text,display:"inline-flex",alignItems:"center",gap:6}}>{client ? <span style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:600,color:T.text}}><span style={{width:18,height:18,borderRadius:5,background:client.color||T.accent,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff"}}>{ini(client.name)}</span>{client.name}</span> : <span>Choose client</span>}<span style={{fontSize:9,opacity:.6}}>▼</span></button>}/>
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative",flexWrap:"wrap",justifyContent:"flex-end"}}>
             {!isNew && (()=>{ const on1=flagU(t), on2=flagF(kind,t); const fb=(on,col,label,fl,title)=>(
               <button type="button" title={title} onClick={()=>onToggleFlag(fl)} style={{display:"inline-flex",alignItems:"center",gap:5,background:on?col+"33":"transparent",border:`1px solid ${on?col:T.border2}`,color:on?col:T.text3,borderRadius:999,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><Icon n="flag" size={11}/>{label}</button>);
-              return <>{fb(on1,"#ff3b30","Urgent","urgent","Meeting flag: Urgent")}{fb(on2,"#ff9f0a",FLAG_F_LABEL,"followUp","Meeting flag: "+FLAG_F_LABEL)}</>; })()}
+              return <span title="Meeting flags put this task on the Meeting Flags list in the sidebar, for discussion in meetings" style={{display:"inline-flex",alignItems:"center",gap:6,border:`1px solid ${T.border}`,borderRadius:999,padding:"2px 3px 2px 10px",background:"rgba(var(--ovc),.03)"}}><span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text3,whiteSpace:"nowrap"}}>Meeting flags</span>{fb(on1,"#ff3b30","Urgent","urgent","Meeting flag: Urgent")}{fb(on2,"#ff9f0a",FLAG_F_LABEL,"followUp","Meeting flag: "+FLAG_F_LABEL)}</span>; })()}
             {!isNew && (
               <span style={{position:"relative",display:"inline-flex",alignItems:"center",gap:4}}>
                 {t.link ? <>
@@ -886,6 +911,20 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
                 </Pop>
               </span>
             )}
+            {!isNew && onTogglePriority && (()=>{ const inL = people.filter(p=>((priorityLists||{})[p]||[]).some(x=>x.t==="task"&&x.k===kind&&x.tid===task.id)); return (
+              <span style={{position:"relative",display:"inline-flex"}}>
+                <button type="button" title="Personal priorities: add this task to someone's personal priorities in User Lists" onClick={()=>setPrPop(o=>!o)} style={{display:"inline-flex",alignItems:"center",gap:5,background:inL.length?"rgba(255,214,10,.15)":"transparent",border:`1px solid ${inL.length?"rgba(255,214,10,.55)":T.border2}`,color:inL.length?"#ffd60a":T.text3,borderRadius:999,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><Icon n="star" size={11}/>Personal priorities{inL.length?` (${inL.length})`:""}</button>
+                <Pop open={prPop} onClose={()=>setPrPop(false)} width={230} align="right">
+                  <div style={{fontSize:10.5,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",padding:"4px 8px 6px"}}>In the personal priorities of</div>
+                  <div style={{maxHeight:260,overflowY:"auto"}}>
+                  {people.map(p=>{ const on=inL.includes(p); return (
+                    <div key={p} onClick={()=>onTogglePriority(p)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?"#ffd60a":T.border2}`,background:on?"#ffd60a":"transparent",color:"#0e0e0e",fontSize:11,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                      <Avatar name={p} size={20}/>{p}
+                    </div>); })}
+                  </div>
+                </Pop>
+              </span>); })()}
             {!isNew && (
               <>
                 <button title="More" onClick={()=>setMenu(m=>!m)} style={{background:"transparent",border:"none",cursor:"pointer",color:T.text2,padding:6,borderRadius:8,display:"flex"}}><Icon n="more" size={16}/></button>
@@ -933,8 +972,8 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
                     <PeoplePicker value={wch(t)} onChange={l=>setPeople("watchers",l)} people={people} onAddPerson={onAddPerson} addLabel="Watch"/>
                   </PropRow>
                   <PropRow icon="flag" label="Priority">
-                    <Icon n="flag" size={14} style={{color:PR[t.priority||"normal"].color}}/>
-                    <select className="ghost-in" value={t.priority||"normal"} onChange={e=>set("priority",e.target.value)} style={selStyle}>{PRIORITIES.map(p=><option key={p.key} value={p.key}>{p.label}</option>)}</select>
+                    <Icon n="flag" size={14} style={{color:PR[prio(t)].color}}/>
+                    <select className="ghost-in" value={prio(t)} onChange={e=>set("priority",e.target.value)} style={selStyle}>{PRIORITIES.map(p=><option key={p.key} value={p.key}>{p.label}</option>)}</select>
                   </PropRow>
                   {secList && <PropRow icon="tag" label="Section"><select className="ghost-in" value={t[secField]||KINDS[kind].defType} onChange={e=>set(secField,e.target.value)} style={selStyle}>{secList.map(s=>(<option key={s.key} value={s.key}>{s.label}</option>))}</select></PropRow>}
                 </div>
@@ -1084,18 +1123,6 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
               <Pop open={pop==="status"} onClose={()=>setPop(null)} width={200}>{cfg.map(s=>opt(s.key===d.status,()=>{set("status",s.key);setPop(null);},<><span style={{width:8,height:8,borderRadius:"50%",background:s.bg}}/>{s.label}</>))}</Pop>
             </>)}
             {row(<>
-              <Chip icon="user" onClick={()=>togglePop("assignee")} active={dAsg.length>0} label={dAsg.length?dAsg.join(", "):"Assignees"}>{!dAsg.length && <span style={{color:"#ff453a",marginLeft:-3}}>*</span>}</Chip>
-              <Pop open={pop==="assignee"} onClose={()=>setPop(null)} width={260} up>
-                <PeoplePicker inline value={dAsg} onChange={l=>setPpl("assignees",l)} people={people} onAddPerson={onAddPerson}/>
-              </Pop>
-            </>)}
-            {row(<>
-              <Chip icon="users" onClick={()=>togglePop("watchers")} active={wch(d).length>0} label={wch(d).length?"Watchers: "+wch(d).join(", "):"Watchers"}/>
-              <Pop open={pop==="watchers"} onClose={()=>setPop(null)} width={260} up>
-                <PeoplePicker inline value={wch(d)} onChange={l=>setPpl("watchers",l)} people={people} onAddPerson={onAddPerson}/>
-              </Pop>
-            </>)}
-            {row(<>
               <Chip icon="calendar" onClick={()=>togglePop("due")} active={!!d.deadline} label={d.deadline?fmtDate(d.deadline):"Due date"}/>
               <Pop open={pop==="due"} onClose={()=>setPop(null)} width={210}>
                 <input type="date" autoFocus value={d.deadline} onChange={e=>{set("deadline",e.target.value);}} style={inS}/>
@@ -1121,6 +1148,10 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
                 </div>
               </Pop>
             </>)}
+          </div>
+          <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:4}}>
+            {fieldRow(<span>Assignees <span style={{color:"#ff453a"}}>*</span></span>, <PeoplePicker value={dAsg} onChange={l=>setPpl("assignees",l)} people={people} onAddPerson={onAddPerson} addLabel="Assign"/>)}
+            {fieldRow("Watchers", <PeoplePicker value={wch(d)} onChange={l=>setPpl("watchers",l)} people={people} onAddPerson={onAddPerson} addLabel="Watch"/>)}
           </div>
           <div style={{marginTop:20}}>
             <div style={{fontSize:12,color:T.text2,fontWeight:600,marginBottom:8}}>Fields</div>
@@ -1970,13 +2001,13 @@ const SYNC_DOCS = {
   },
   extras: {
     coll:"creative", field:"onedash-extras-v1",
-    proj: d => J({team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
+    proj: d => J({priorityLists:d.priorityLists||{}, team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
     apply: (nd, p) => {
-      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])]; nd.flagOrder = {...(nd.flagOrder||{}), ...(p.flagOrder||{})}; nd.team = [...new Set([...(nd.team||[]), ...(p.team||[])])]; nd.meetingLinks = {...(nd.meetingLinks||{}), ...(p.meetingLinks||{})};
+      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])]; nd.flagOrder = {...(nd.flagOrder||{}), ...(p.flagOrder||{})}; nd.team = [...new Set([...(nd.team||[]), ...(p.team||[])])]; nd.priorityLists = {...(nd.priorityLists||{}), ...(p.priorityLists||{})}; nd.meetingLinks = {...(nd.meetingLinks||{}), ...(p.meetingLinks||{})};
       nd.archive = [...(nd.archive||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.archive||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
       nd.deleted = [...(nd.deleted||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.deleted||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
     },
-    build: (base, d) => ({...base, team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
+    build: (base, d) => ({...base, priorityLists:d.priorityLists||{}, team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
   },
   feedback: {
     coll:"creative", field:"onedash-feedback-v1", refetch:true,
@@ -2947,6 +2978,285 @@ function ClientSpecSheet({data, upd, openClient, addSite, goRegister}) {
   );
 }
 
+// ── User Lists: a person's personal priorities (tagged tasks and manual entries), their assigned tasks, and a manual list ──
+const ML_WHO_KEY = "od_list_who";
+const ML_SORT_KEY = "od_list_sort";
+const ML_SORTS = [["due","Due date"],["status","Status"],["client","Client"],["service","Service"],["title","Task name"]];
+const ML_COLS = "20px minmax(0,1fr) 92px 120px 112px";
+function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, onToggleManual, onPromote, onRemove, onReorder, onTogglePriority, onConvert, onClose, onClearDone}) {
+  const [text, setText] = useState("");
+  const [tab, setTab] = useState("assigned");
+  const [q, setQ] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const [view, setView] = useState("all");     // all | prio | assigned | manual | work | recents
+  const [colS, setColS] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("od_list_collapsed")||"{}")||{}; }catch(e){ return {}; } });
+  const toggleCol = sec => setColS(c=>{ const n={...c,[sec]:!c[sec]}; try{ localStorage.setItem("od_list_collapsed",JSON.stringify(n)); }catch(e){} return n; });
+  const show = sec => view==="all" || view===sec;
+  const isCol = sec => view==="all" && !!colS[sec];
+  const [drag, setDrag] = useState(null);      // {id, sec}
+  const [over, setOver] = useState(null);      // {id, pos, sec} or {sec, end:true}
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sort, setSortS] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(ML_SORT_KEY)||"null")||{k:"due",d:1}; }catch(e){ return {k:"due",d:1}; } });
+  const setSort = s => { setSortS(s); try{ localStorage.setItem(ML_SORT_KEY,JSON.stringify(s)); }catch(e){} };
+  useEffect(()=>{ if(!sortOpen) return; const h=()=>setSortOpen(false); const t=setTimeout(()=>document.addEventListener("mousedown",h),0); return ()=>{ clearTimeout(t); document.removeEventListener("mousedown",h); }; },[sortOpen]);
+
+  const items = lists[who]||[];
+  const find = (k,id) => all.find(x=>x.kind===k && x.task.id===id);
+  const rows = items.map(it=>it.t==="task" ? {it, ref:find(it.k,it.tid)} : {it}).filter(r=>r.it.t==="manual" || (r.ref && !isDoneTask(r.ref.kind,r.ref.task)));
+  const prioRows = rows.filter(r=>r.it.t==="task" || r.it.p);
+  const manualRows = rows.filter(r=>r.it.t==="manual" && !r.it.p);
+  const prioOpen = prioRows.filter(r=>!(r.it.t==="manual"&&r.it.done)), prioDone = prioRows.filter(r=>r.it.t==="manual"&&r.it.done);
+  const manualOpen = manualRows.filter(r=>!r.it.done), manualDone = manualRows.filter(r=>r.it.done);
+  const inList = new Set(items.filter(i=>i.t==="task").map(i=>i.k+i.tid));
+  const mine = all.filter(x=>!isDoneTask(x.kind,x.task) && asg(x.task).includes(who));
+  const watching = all.filter(x=>!isDoneTask(x.kind,x.task) && wch(x.task).includes(who) && !asg(x.task).includes(who));
+  const ql = q.trim().toLowerCase();
+  const STAT = {urgent:0,review:1,progress:2,revision:3,client:4,awaiting:4,todo:5,blocked:6};
+  const cmp = (a,b) => {
+    const k=sort.k; let r=0;
+    if (k==="due") { const da=a.task.deadline?daysUntil(a.task.deadline):null, db=b.task.deadline?daysUntil(b.task.deadline):null; r = da===null&&db===null?0:da===null?1:db===null?-1:da-db; }
+    else if (k==="status") r=(STAT[a.task.status]??9)-(STAT[b.task.status]??9);
+    else if (k==="client") r=a.client.localeCompare(b.client);
+    else if (k==="service") r=a.label.localeCompare(b.label);
+    else r=a.task.title.localeCompare(b.task.title);
+    if (r===0 && k!=="title") r=(STAT[a.task.status]??9)-(STAT[b.task.status]??9);
+    const nullLast = k==="due" && (!a.task.deadline || !b.task.deadline);
+    return nullLast ? r : r*sort.d;
+  };
+  const pool = (tab==="assigned"?mine:watching).filter(x=>!inList.has(x.kind+x.task.id) && (!ql || (x.task.title+" "+x.client+" "+x.label).toLowerCase().includes(ql))).sort(cmp);
+  const shown = showAll ? pool : pool.slice(0,10);
+
+  // drag and drop: reorder inside a list, or move a manual entry between Personal priorities and the manual list
+  const secOf = r => (r.it.t==="task"||r.it.p) ? "prio" : "manual";
+  const dropOn = (targetId, pos, tsec) => {
+    if (!drag || drag.id===targetId) return;
+    const di = items.find(i=>i.id===drag.id); if(!di) return;
+    if (di.t==="task" && tsec!=="prio") return;                       // tasks only live in Personal priorities
+    const ids = items.map(i=>i.id).filter(id=>id!==drag.id); const at = ids.indexOf(targetId);
+    ids.splice(at<0?ids.length:(pos==="after"?at+1:at),0,drag.id);
+    onReorder(who, ids, di.t==="manual" ? {id:di.id,p:tsec==="prio"} : null);
+  };
+  const dropEnd = tsec => {
+    if (!drag) return; const di = items.find(i=>i.id===drag.id); if(!di) return;
+    if (di.t==="task" && tsec!=="prio") return;
+    const ids = items.map(i=>i.id).filter(id=>id!==drag.id); ids.push(drag.id);
+    onReorder(who, ids, di.t==="manual" ? {id:di.id,p:tsec==="prio"} : null);
+  };
+  const dndRow = (id, sec) => ({
+    draggable:true,
+    onDragStart:e=>{ setDrag({id,sec}); e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",id);}catch(x){} },
+    onDragOver:e=>{ if(!drag) return; e.preventDefault(); e.stopPropagation(); const rc=e.currentTarget.getBoundingClientRect(); const pos=e.clientY>rc.top+rc.height/2?"after":"before"; if(!over||over.id!==id||over.pos!==pos) setOver({id,pos,sec}); },
+    onDrop:e=>{ e.preventDefault(); e.stopPropagation(); const rc=e.currentTarget.getBoundingClientRect(); dropOn(id, e.clientY>rc.top+rc.height/2?"after":"before", sec); setDrag(null); setOver(null); },
+    onDragEnd:()=>{ setDrag(null); setOver(null); }
+  });
+  const secDnd = sec => ({
+    onDragOver:e=>{ if(!drag) return; const di=items.find(i=>i.id===drag.id); if(!di || (di.t==="task"&&sec!=="prio")) return; e.preventDefault(); if(!over||!over.end||over.sec!==sec) setOver({sec,end:true}); },
+    onDrop:e=>{ if(!drag) return; e.preventDefault(); dropEnd(sec); setDrag(null); setOver(null); }
+  });
+  const secStyle = sec => ({borderRadius:14,padding:6,margin:-6,outline:over&&over.end&&over.sec===sec?"2px dashed var(--info)":"2px dashed transparent",transition:"outline-color .12s"});
+  const rowBox = (id, extra) => ({display:"grid",gridTemplateColumns:ML_COLS,alignItems:"center",columnGap:10,padding:"10px 12px",background:T.surface,borderRadius:12,marginBottom:6,opacity:drag&&drag.id===id?.4:1,border:`1px solid ${T.border}`,borderTop:over&&over.id===id&&over.pos==="before"?"2px solid var(--info)":`1px solid ${T.border}`,borderBottom:over&&over.id===id&&over.pos==="after"?"2px solid var(--info)":`1px solid ${T.border}`,...extra});
+  const iconBtn = {background:"none",border:"none",cursor:"pointer",color:T.text3,padding:4,display:"inline-flex",borderRadius:6};
+  const meta = x => <div style={{fontSize:11,color:T.text4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{x.client} · {x.label}{x.task.deadline?<span style={{color:isOverdue(x.task.deadline)?"#ff6b6b":T.text4}}> · due {fmtDate(x.task.deadline)}</span>:null}</div>;
+  const flagDot = x => flagU(x.task) ? <Icon n="flag" size={11} style={{color:"#ff3b30",flexShrink:0}}/> : flagF(x.kind,x.task) ? <Icon n="flag" size={11} style={{color:"#ff9f0a",flexShrink:0}}/> : null;
+  const dot = st => <span style={{width:9,height:9,borderRadius:"50%",background:st.bg==="#1c1c1e"?st.text:st.bg,justifySelf:"center"}}/>;
+  const head = (label, note, right, sec) => <div style={{display:"flex",alignItems:"center",gap:8,margin:isCol(sec)?0:"0 0 10px"}}>
+    <button onClick={()=>toggleCol(sec)} aria-expanded={!isCol(sec)} title={isCol(sec)?"Expand":"Collapse"} style={{display:"inline-flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"2px 0",cursor:"pointer",fontFamily:"inherit"}}>
+      <span style={{display:"inline-flex",color:T.text3,transform:isCol(sec)?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s"}}><Icon n="chevron" size={11}/></span>
+      <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:label==="Personal priorities"?"var(--warn)":T.text2}}>{label}</span>
+    </button>
+    <span style={{fontSize:11,color:T.text4}}>{note}</span><span style={{marginLeft:"auto"}}>{isCol(sec)?null:right}</span></div>;
+  const clearBtn = n => n>0 && <button onClick={()=>onClearDone(who)} style={{background:"none",border:"none",color:T.text3,fontSize:11.5,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Clear {n} done</button>;
+  const addIt = () => { const v=text.trim(); if(!v) return; onAddManual(who,v); setText(""); };
+  const seg = (k,label,n) => <button key={k} onClick={()=>{setTab(k);setShowAll(false);}} style={{background:tab===k?"var(--inv)":"transparent",color:tab===k?"var(--inv-fg)":T.text2,border:`1px solid ${tab===k?"var(--inv)":T.border}`,borderRadius:999,padding:"4px 12px",fontSize:12,fontWeight:tab===k?700:600,cursor:"pointer",fontFamily:"inherit"}}>{label} {n}</button>;
+  const isMe = who===CURRENT_USER;
+  const todoCount = mine.length;
+  const recentCount = (()=>{ try{ return (JSON.parse(localStorage.getItem("od_recents")||"[]")).filter(r=>find(r.k,r.id)).length; }catch(e){ return 0; } })();
+  const cards = [["prio","Personal priorities",prioOpen.length,"open"],["assigned",isMe?"Assigned to me":"Assigned",mine.length,"open"],["manual","Manual list",manualOpen.length,"open"],["work","My work",todoCount,"to do"],["recents","Recents",recentCount,"opened"]];
+  const manualRow = (r, sec) => { const it=r.it; return (
+    <div key={it.id} className="cm" {...dndRow(it.id,sec)} style={{...rowBox(it.id),cursor:"grab"}}>
+      <button onClick={()=>onToggleManual(who,it.id)} title={it.done?"Mark open":"Mark done"} style={{width:18,height:18,borderRadius:"50%",border:`1.5px solid ${it.done?"#30d158":T.border2}`,background:it.done?"#30d158":"transparent",color:"#0e0e0e",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,justifySelf:"center"}}>{it.done && <Icon n="check" size={11}/>}</button>
+      <div style={{gridColumn:"2 / 5",fontSize:13.5,color:it.done?T.text3:T.text,textDecoration:it.done?"line-through":"none",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{it.text}</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:2}}>
+        {sec==="manual" && !it.done && <button title="Add to Personal priorities" onClick={()=>onPromote(who,it.id,true)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:`1px solid ${T.border2}`,color:T.text2,borderRadius:999,padding:"3px 10px",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginRight:4}}><Icon n="star" size={11}/>Prioritise</button>}
+        <button className="cm-x" title="Convert to a task card" onClick={()=>onConvert(who,it)} style={iconBtn}><Icon n="plus" size={14}/></button>
+        <button className="cm-x" title={sec==="prio"?"Move back to the manual list":"Remove"} onClick={()=>sec==="prio"?onPromote(who,it.id,false):onRemove(who,it.id)} style={iconBtn}><Icon n="x" size={13}/></button>
+        {sec==="prio" && <button className="cm-x" title="Remove" onClick={()=>onRemove(who,it.id)} style={iconBtn}><Icon n="trash" size={13}/></button>}
+      </div>
+    </div>); };
+  return (
+    <div style={{position:"absolute",inset:0,zIndex:60,background:T.bg,display:"flex",flexDirection:"column",minHeight:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 22px",borderBottom:`1px solid ${T.border}`,background:T.surface,flexShrink:0,flexWrap:"wrap"}}>
+        <Avatar name={who} size={32}/>
+        <div>
+          <div style={{fontSize:19,fontWeight:700,color:T.text,letterSpacing:"-0.01em",lineHeight:1.2}}>User Lists</div>
+          <div style={{fontSize:11.5,color:T.text3,marginTop:2}}>{isMe?"Your":who+"'s"} personal priorities, assigned tasks and manual list</div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <select aria-label="Whose list" value={who} onChange={e=>setWho(e.target.value)} style={{background:T.bg,color:T.text,border:`1px solid ${T.border}`,borderRadius:999,padding:"6px 14px",fontSize:12.5,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
+            {people.map(p=><option key={p} value={p}>{p===CURRENT_USER?p+" (me)":p}</option>)}
+          </select>
+          <Btn onClick={onClose}>Back to dashboards</Btn>
+        </div>
+      </div>
+      <div style={{flex:1,minHeight:0,overflowY:"auto"}} onDragOver={e=>{ if(drag) e.preventDefault(); }}>
+        <div style={{maxWidth:1000,margin:"0 auto",padding:"20px 22px 70px"}}>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:6}}>
+            {cards.map(([k,l,n,sub])=>{ const on=view===k; return (
+              <button key={k} onClick={()=>setView(on?"all":k)} aria-pressed={on} style={{textAlign:"left",background:on?T.surface2:T.surface,border:`1.5px solid ${on?"var(--inv)":T.border}`,borderRadius:14,padding:"12px 14px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",gap:4,transition:"border-color .12s,background .12s"}}>
+                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:on?T.text:T.text2}}>{l}</span>
+                <span style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:24,fontWeight:700,color:T.text,letterSpacing:"-0.02em",lineHeight:1.1}}>{n}</span><span style={{fontSize:11.5,color:T.text3}}>{sub}</span></span>
+              </button>); })}
+          </div>
+          <div style={{fontSize:11.5,color:T.text4,margin:"0 2px 22px"}}>{view==="all"?"Click a card to show only that part.":"Showing one part. Click the card again to show everything."}</div>
+
+          {show("prio") && <div {...secDnd("prio")} style={secStyle("prio")}>
+          {head("Personal priorities", prioOpen.length+" open"+(isCol("prio")?"":" · drag to reorder"), clearBtn(prioDone.length), "prio")}
+          {!isCol("prio") && <>
+          {prioOpen.length===0 && prioDone.length===0 && <div style={{padding:"16px 16px",border:`1px dashed ${T.border2}`,borderRadius:12,color:T.text3,fontSize:13,lineHeight:1.5,marginBottom:6}}>Nothing here yet. Use Prioritise on a task or manual entry below, or add a task from its card with Personal priorities.</div>}
+          {[...prioOpen,...prioDone].map(r=>{
+            if (r.it.t==="manual") return manualRow(r,"prio");
+            const x=r.ref, st=statusOf(x.kind,x.task.status), id=r.it.id;
+            return (
+              <div key={id} className="cm" {...dndRow(id,"prio")} onClick={()=>onOpen(x.kind,x.task.id)} style={{...rowBox(id),cursor:"pointer"}}>
+                {dot(st)}
+                <div style={{minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13.5,color:T.text}}>{flagDot(x)}<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</span></div>
+                  {meta(x)}
+                </div>
+                <AvatarStack names={asg(x.task)} size={20}/>
+                <span style={{fontSize:11.5,color:T.text3,whiteSpace:"nowrap"}}>{st.label}</span>
+                <div style={{display:"flex",justifyContent:"flex-end"}}><button className="cm-x" title="Remove from Personal priorities" onClick={e=>{e.stopPropagation();onRemove(who,id);}} style={iconBtn}><Icon n="x" size={13}/></button></div>
+              </div>);
+          })}
+          </>}
+          </div>}
+
+          {show("assigned") && <div style={{marginTop:view==="all"?34:0}}>
+            {head(isMe?"Assigned to me":"Assigned to "+who, mine.length+" open", <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{seg("assigned","Assigned",mine.length)}{seg("watching","Watching",watching.length)}<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter" style={{width:150,background:T.surface,border:`1px solid ${T.border}`,borderRadius:999,padding:"4px 12px",color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",marginLeft:4}}/></span>, "assigned")}
+            {!isCol("assigned") && <>
+            <div style={{display:"grid",gridTemplateColumns:ML_COLS,columnGap:10,alignItems:"center",padding:"0 12px 6px",fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4}}>
+              <span/><span>Task</span><span/>
+              <span style={{position:"relative"}}>
+                <button onClick={e=>{e.stopPropagation();setSortOpen(o=>!o);}} title="Sort the assigned tasks" style={{display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap",background:sortOpen?"rgba(var(--ovc),.08)":"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"2px 9px",fontSize:10.5,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.text2,cursor:"pointer",fontFamily:"inherit"}}>Status<span style={{fontWeight:500,letterSpacing:0,textTransform:"none",color:T.text4}}>· {(ML_SORTS.find(s=>s[0]===sort.k)||[])[1]}</span><Icon n="chevron" size={9}/></button>
+                {sortOpen && (
+                  <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:20,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:12,padding:5,width:190,boxShadow:"0 12px 36px rgba(0,0,0,.55)",textTransform:"none",letterSpacing:0,fontWeight:500}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4,padding:"4px 8px"}}>Sort by</div>
+                    {ML_SORTS.map(([k,l])=>(
+                      <div key={k} onClick={()=>{ setSort({k,d:sort.k===k?-sort.d:1}); setSortOpen(false); }} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:12.5,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{width:12,color:"#30d158",fontWeight:800}}>{sort.k===k?"✓":""}</span>{l}{sort.k===k && <span style={{marginLeft:"auto",color:T.text4,fontSize:11}}>{sort.d===1?"\u2191":"\u2193"}</span>}
+                      </div>))}
+                    <div style={{fontSize:10.5,color:T.text4,padding:"4px 8px"}}>Choose the same option again to reverse it.</div>
+                  </div>)}
+              </span>
+              <span/>
+            </div>
+            {pool.length===0 && <div style={{fontSize:12.5,color:T.text4,padding:"6px 2px"}}>{(tab==="assigned"?mine:watching).length===0?"Nothing here.":"Everything here is already in Personal priorities, or nothing matches the filter."}</div>}
+            {shown.map(x=>{ const st=statusOf(x.kind,x.task.status); return (
+              <div key={x.kind+x.task.id} className="cm" onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"grid",gridTemplateColumns:ML_COLS,alignItems:"center",columnGap:10,padding:"9px 12px",border:`1px solid ${T.border}`,borderRadius:12,marginBottom:6,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.surface} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                {dot(st)}
+                <div style={{minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.text}}>{flagDot(x)}<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</span></div>
+                  {meta(x)}
+                </div>
+                <AvatarStack names={asg(x.task)} size={20}/>
+                <span style={{fontSize:11.5,color:T.text3,whiteSpace:"nowrap"}}>{st.label}</span>
+                <div style={{display:"flex",justifyContent:"flex-end"}}><button title="Add to Personal priorities" onClick={e=>{e.stopPropagation();onTogglePriority(who,x.kind,x.task.id);}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:`1px solid ${T.border2}`,color:T.text2,borderRadius:999,padding:"3px 10px",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}><Icon n="star" size={11}/>Prioritise</button></div>
+              </div>); })}
+            {!showAll && pool.length>shown.length && <button onClick={()=>setShowAll(true)} style={{background:"none",border:"none",color:T.text2,fontSize:12.5,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",padding:"4px 2px"}}>Show all {pool.length}</button>}
+            </>}
+          </div>}
+
+          {show("manual") && <div {...secDnd("manual")} style={{...secStyle("manual"),marginTop:view==="all"?34:0}}>
+            {head("Manual list", manualOpen.length+" open"+(isCol("manual")?"":" · your own notes and reminders · drag to reorder"), clearBtn(manualDone.length), "manual")}
+            {!isCol("manual") && <>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") addIt(); }} placeholder="Add to your manual list, e.g. Call Jutta about pricing terms" style={{flex:1,background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"10px 14px",color:T.text,fontSize:13.5,fontFamily:"inherit",outline:"none"}} onFocus={e=>e.target.style.borderColor=T.border2} onBlur={e=>e.target.style.borderColor=T.border}/>
+              <Btn variant="primary" onClick={addIt} disabled={!text.trim()}>Add</Btn>
+            </div>
+            {[...manualOpen,...manualDone].map(r=>manualRow(r,"manual"))}
+            </>}
+          </div>}
+
+          {(show("work")||show("recents")) && <div style={{display:"grid",gridTemplateColumns:view==="all"?"repeat(auto-fit,minmax(380px,1fr))":"1fr",gap:16,marginTop:view==="all"?34:0,alignItems:"start"}}>
+            {show("work") && <MLWork who={who} all={all} archive={archive} onOpen={onOpen}/>}
+            {show("recents") && <MLRecents all={all} onOpen={onOpen}/>}
+          </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── My work: to do / done / watching, grouped by due date (layout proof of concept) ──
+function MLWork({who, all, archive, onOpen}) {
+  const [tab, setTab] = useState("todo");
+  const [shut, setShut] = useState({});
+  const cardBox = {background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,padding:"16px 16px 12px",minWidth:0};
+  const live = all.filter(x=>!isDoneTask(x.kind,x.task));
+  const todo = live.filter(x=>asg(x.task).includes(who));
+  const watch = live.filter(x=>wch(x.task).includes(who) && !asg(x.task).includes(who));
+  const done = (archive||[]).filter(a=>asg(a).includes(who)).sort((a,b)=>(b.archivedAt||"").localeCompare(a.archivedAt||"")).slice(0,30);
+  const bucket = x => { const d = x.task.deadline ? daysUntil(x.task.deadline) : null; return d===null?"none":d<0?"overdue":d===0?"today":d<=7?"week":"later"; };
+  const BK = [["overdue","Overdue","#C23B2E"],["today","Today","#1E8A4C"],["week","Next 7 days","#2F5FE0"],["later","Later","#6E6E73"],["none","No due date","#6E6E73"]];
+  const list = tab==="watch" ? watch : todo;
+  const tabBtn = (k,l,n) => <button key={k} onClick={()=>setTab(k)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===k?"var(--inv)":"transparent"}`,padding:"4px 2px 8px",marginRight:16,fontSize:13,fontWeight:tab===k?700:500,color:tab===k?T.text:T.text3,cursor:"pointer",fontFamily:"inherit"}}>{l} <span style={{color:T.text4,fontWeight:500}}>{n}</span></button>;
+  const cols = "16px minmax(0,1fr) 62px 72px";
+  const hdr = <div style={{display:"grid",gridTemplateColumns:cols,columnGap:10,padding:"6px 6px",fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4,borderBottom:`1px solid ${T.border}`}}><span/><span>Name</span><span>Priority</span><span>Due date</span></div>;
+  const row = x => { const st=statusOf(x.kind,x.task.status), p=PR[prio(x.task)]||PR.normal; const od = x.task.deadline && isOverdue(x.task.deadline); return (
+    <div key={x.kind+x.task.id} onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"grid",gridTemplateColumns:cols,columnGap:10,alignItems:"center",padding:"8px 6px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      <span title={st.label} style={{width:9,height:9,borderRadius:"50%",background:st.bg==="#1c1c1e"?st.text:st.bg,justifySelf:"center"}}/>
+      <div style={{minWidth:0}}><div style={{fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</div><div style={{fontSize:11,color:T.text4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.client} · {x.label}</div></div>
+      <span title={p.label} style={{display:"inline-flex",color:p.color}}><Icon n="flag" size={13}/></span>
+      <span style={{fontSize:12,color:od?"#C23B2E":T.text2,whiteSpace:"nowrap"}}>{x.task.deadline?fmtDate(x.task.deadline):"–"}</span>
+    </div>); };
+  return (
+    <div style={cardBox}>
+      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:10}}>My work</div>
+      <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>{tabBtn("todo","To do",todo.length)}{tabBtn("done","Done",done.length)}{tabBtn("watch","Watching",watch.length)}</div>
+      <div style={{maxHeight:440,overflowY:"auto"}}>
+        {tab==="done" ? (done.length===0 ? <div style={{fontSize:12.5,color:T.text4,padding:"14px 4px"}}>Nothing completed yet. Tasks you finish move to the archive and show here.</div> : done.map(a=>(
+          <div key={a.id+a.archivedAt} style={{display:"grid",gridTemplateColumns:"16px minmax(0,1fr) auto",columnGap:10,alignItems:"center",padding:"8px 6px",borderBottom:`1px solid ${T.border}`}}>
+            <span style={{color:"#1E8A4C",display:"inline-flex",justifySelf:"center"}}><Icon n="check" size={12}/></span>
+            <span style={{fontSize:13,color:T.text3,textDecoration:"line-through",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.title}</span>
+            <span style={{fontSize:11.5,color:T.text4}}>{a.archivedAt?fmtDate(a.archivedAt):""}</span>
+          </div>))) : (list.length===0 ? <div style={{fontSize:12.5,color:T.text4,padding:"14px 4px"}}>Nothing here.</div> : <>
+          {hdr}
+          {BK.map(([k,l,c])=>{ const g=list.filter(x=>bucket(x)===k).sort((a,b)=>(a.task.deadline||"9999").localeCompare(b.task.deadline||"9999")); if(!g.length) return null; const closed=!!shut[k]; return (
+            <div key={k}>
+              <button onClick={()=>setShut(o=>({...o,[k]:!o[k]}))} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",padding:"10px 4px 6px",cursor:"pointer",fontFamily:"inherit"}}>
+                <span style={{display:"inline-flex",color:T.text3,transform:closed?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s"}}><Icon n="chevron" size={10}/></span>
+                <span style={{fontSize:10.5,fontWeight:800,letterSpacing:"0.07em",textTransform:"uppercase",color:"#fff",background:c,borderRadius:999,padding:"2px 10px"}}>{l}</span>
+                <span style={{fontSize:12,color:T.text3}}>{g.length}</span>
+              </button>
+              {!closed && g.map(row)}
+            </div>); })}
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// ── Recents: tasks opened on this device ──
+function MLRecents({all, onOpen}) {
+  const rec = (()=>{ try{ return JSON.parse(localStorage.getItem("od_recents")||"[]"); }catch(e){ return []; } })()
+    .map(r=>({r, x:all.find(y=>y.kind===r.k && y.task.id===r.id)})).filter(o=>o.x).slice(0,10);
+  return (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,padding:"16px 16px 12px",minWidth:0}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}><span style={{fontSize:15,fontWeight:700,color:T.text}}>Recents</span><span style={{fontSize:11,color:T.text4}}>tasks you opened on this device</span></div>
+      {rec.length===0 && <div style={{fontSize:12.5,color:T.text4,padding:"14px 4px"}}>Open a task card and it will show up here.</div>}
+      {rec.map(({r,x})=>{ const st=statusOf(x.kind,x.task.status); return (
+        <div key={r.k+r.id} onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"grid",gridTemplateColumns:"16px minmax(0,1fr) auto auto",columnGap:10,alignItems:"center",padding:"9px 6px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+          <span title={st.label} style={{width:9,height:9,borderRadius:"50%",background:st.bg==="#1c1c1e"?st.text:st.bg,justifySelf:"center"}}/>
+          <div style={{minWidth:0}}><div style={{fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</div><div style={{fontSize:11,color:T.text4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>in {x.client} · {x.label}</div></div>
+          <AvatarStack names={asg(x.task)} size={18}/>
+          <span style={{fontSize:11.5,color:T.text3,whiteSpace:"nowrap"}}>{timeAgo(r.at)}</span>
+        </div>); })}
+    </div>
+  );
+}
+
 
 // ── App ─────────────────────────────────────────────────────────────────────
 
@@ -3100,10 +3410,11 @@ const H_LABEL = {creative:"Creative",tech:"Technical",ppc:"PPC",social:"Social M
 const H_RANK = {urgent:0,review:1,progress:2,revision:3,client:4,awaiting:4,todo:5,blocked:6};
 function hCollect(data, kinds) {
   const out = [];
-  kinds.forEach(k=>{
+  H_KINDS.forEach(k=>{
     const names = {}; ((k==="social"?data.social.clients:data.clients)||[]).forEach(c=>{names[c.id]=c.name;});
     (data[KINDS[k].coll]||[]).forEach(t=>{
       if (KINDS[k].hidden.includes(t.status) || t.status==="done" || t.status==="deliver" || t.status==="completed") return;
+      if (!dashKinds(k,t).some(x=>kinds.includes(x))) return;
       const days = t.deadline ? daysUntil(t.deadline) : null;
       const urgent = flagU(t);
       const follow = flagF(k,t);
@@ -3173,9 +3484,9 @@ function hSocial(data, tasks) {
     return {c,g,ts,key:socialStatusKey(c.status),errs:(c.errorLog||[]).length};
   }).sort((a,b)=>{ const da=a.g.days, db=b.g.days; if(da===null&&db===null) return a.c.name.localeCompare(b.c.name); if(da===null) return 1; if(db===null) return -1; return da-db; });
 }
-function HealthDash({data, goTo, upd}) {
+function HealthDash({data, goTo, upd, lockSvc, leftSlot}) {
   const [socId, setSocId] = useState(null);
-  const [svc, setSvc] = useState("all");
+  const [svc, setSvc] = useState(lockSvc||"all");
   const [who, setWho] = useWho();
   const [dr, setDr] = useState(null);
   const kinds = svc==="all" ? H_KINDS : [svc];
@@ -3212,9 +3523,9 @@ function HealthDash({data, goTo, upd}) {
   return (
     <div style={{flex:1,minHeight:0,overflowY:"auto",background:T.bg,padding:"18px 20px 40px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        <span style={{fontSize:20,fontWeight:700,color:T.text,marginRight:6}}>Health</span>
-        {chip(svc==="all","All services",()=>setSvc("all"))}{H_KINDS.map(k=>chip(svc===k,H_LABEL[k],()=>setSvc(k)))}
-        <span style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>{chip(who==="all","Everyone",()=>setWho("all"))}{chip(who==="me","Me",()=>setWho("me"))}
+        {leftSlot || <span style={{fontSize:20,fontWeight:700,color:T.text,marginRight:6}}>Health</span>}
+        {!lockSvc && <>{chip(svc==="all","All services",()=>setSvc("all"))}{H_KINDS.map(k=>chip(svc===k,H_LABEL[k],()=>setSvc(k)))}</>}
+        <span style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>{lockSvc && <>{chip(svc!=="all",H_LABEL[lockSvc],()=>setSvc(lockSvc))}{chip(svc==="all","All services",()=>setSvc("all"))}<span style={{width:1,height:18,background:T.border,margin:"0 2px"}}/></>}{chip(who==="all","Everyone",()=>setWho("all"))}{chip(who==="me","Me",()=>setWho("me"))}
           <select aria-label="Filter by person" value={who==="all"||who==="me"?"":who} onChange={e=>setWho(e.target.value||"all")} style={{background:T.surface,color:T.text,border:`1px solid ${who!=="all"&&who!=="me"?"var(--inv)":T.border}`,borderRadius:999,padding:"5px 12px",fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}><option value="">Pick a person</option>{roster.map(n=><option key={n} value={n}>{n}{n===CURRENT_USER?" (me)":""}</option>)}</select></span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:(showSocial&&wide)?"repeat(4,minmax(0,1fr))":"repeat(auto-fit,minmax(135px,1fr))",gap:10}}>
@@ -3309,6 +3620,24 @@ function TeamPage({kind, data, goTo}) {
         <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:10}}>{sel.p} <span style={{fontWeight:500,color:T.text3,fontSize:12}}>· {sel.ts.length} open, most pressing first</span></div>
         {sel.ts.length===0 ? <div style={{fontSize:12,color:T.text4}}>Nothing open.</div> : sel.ts.map(t=><HRow key={t.id} t={t} onClick={()=>goTo(kind,t)} sub={t._client+" · "+statusOf(kind,t.status).label} right={<span style={{color:t._overdue?"#ff6b6b":T.text2}}>{hDue(t)}</span>}/>)}
       </div>}
+    </div>
+  );
+}
+
+// Overview pages: Health snapshot for the service, next to the page that used to be the overview
+function OverviewShell({service, label, view, setView, data, upd, goTo, children}) {
+  const seg = (
+    <div role="tablist" style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.border}`,borderRadius:999,padding:3,gap:2}}>
+      {[["health","Health snapshot"],["main",label]].map(([k,l])=>(
+        <button key={k} role="tab" aria-selected={view===k} onClick={()=>setView(k)} style={{background:view===k?"var(--inv)":"transparent",color:view===k?"var(--inv-fg)":T.text2,border:"none",borderRadius:999,padding:"5px 15px",fontSize:12.5,fontWeight:view===k?700:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
+      ))}
+    </div>
+  );
+  if (view==="health") return <HealthDash key={service} data={data} upd={upd} goTo={goTo} lockSvc={service} leftSlot={seg}/>;
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",minHeight:0}}>
+      <div style={{padding:"10px 20px",borderBottom:`1px solid ${T.border}`,background:T.bg,flexShrink:0}}>{seg}</div>
+      <div style={{flex:1,minHeight:0,position:"relative",overflow:"hidden"}}>{children}</div>
     </div>
   );
 }
@@ -3582,9 +3911,13 @@ function App() {
   const [data, setData] = useState(load);
   const [activeId, setActiveId] = useState("c1");
   const [clientTab, setClientTab] = useState("creative");
+  useEffect(()=>{ try{ document.documentElement.setAttribute("data-ctab",clientTab); }catch(e){} },[clientTab]);
   const [leftPanel, setLeftPanel] = useState("flags"); // "flags" | "clients" | null
   const [srDraft, setSrDraft] = useState(null);
   const [healthOpen, setHealthOpen] = useState(false);
+  const [ovTab, setOvTab] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("od_ov_tab")||"{}"); }catch(e){ return {}; } });
+  const ovView = k => ovTab[k]||"health";
+  const setOvView = (k,v) => { const n={...ovTab,[k]:v}; setOvTab(n); try{ localStorage.setItem("od_ov_tab",JSON.stringify(n)); }catch(e){} };
   const [fbOpen, setFbOpen] = useState(false);
   const [fbReport, setFbReport] = useState(null);
   const [fbOpenId, setFbOpenId] = useState(null);
@@ -3596,6 +3929,14 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [superComms, setSuperComms] = useState(null);
   const [mlEdit, setMlEdit] = useState(null);
+  const [listOpen, setListOpen] = useState(false);
+  const [listUnlocked, setListUnlocked] = useState(()=>{ try{ return sessionStorage.getItem("od_admin_ok")==="1"; }catch(e){ return false; } });
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwTry, setPwTry] = useState("");
+  const [pwErr, setPwErr] = useState(false);
+  const tryUnlock = () => { if(pwTry==="admin"){ setListUnlocked(true); try{ sessionStorage.setItem("od_admin_ok","1"); }catch(x){} setPwOpen(false); setListOpen(true); } else setPwErr(true); };
+  const [listWho, setListWhoS] = useState(()=>{ try{ return localStorage.getItem(ML_WHO_KEY)||CURRENT_USER; }catch(e){ return CURRENT_USER; } });
+  const setListWho = v => { setListWhoS(v); try{ localStorage.setItem(ML_WHO_KEY,v); }catch(e){} };
   const [techDataOpen, setTechDataOpen] = useState(null);
   const [backupModal, setBackupModal] = useState(null);
   const [cmImport, setCmImport] = useState(false);
@@ -3607,6 +3948,7 @@ function App() {
   const [hoveredId, setHoveredId] = useState(null);
   const [highlightedId, setHighlightedId] = useState(null);
   const [cardCtx, setCardCtx] = useState(null); // {kind,id} | {kind,isNew,preset}
+  useEffect(()=>{ if(!cardCtx||cardCtx.isNew||!cardCtx.id) return; try{ const l=JSON.parse(localStorage.getItem("od_recents")||"[]").filter(r=>!(r.k===cardCtx.kind&&r.id===cardCtx.id)); l.unshift({k:cardCtx.kind,id:cardCtx.id,at:Date.now()}); localStorage.setItem("od_recents",JSON.stringify(l.slice(0,30))); }catch(e){} },[cardCtx&&cardCtx.kind,cardCtx&&cardCtx.id]);
   const [footerOpen, setFooterOpen] = useState(null);
   const [toolsFilter, setToolsFilter] = useState("All");
   const [registerSearch, setRegisterSearch] = useState("");
@@ -3646,6 +3988,16 @@ function App() {
   const sortedClients = [...data.clients].sort((a,b)=>{const o={"1":0,"2":1,"3":2,"4":3,"internal":4,"churned":5};return (o[a.tier]||6)-(o[b.tier]||6)||a.priority-b.priority;});
   applyTeam(data.team);
   const people = TEAM;
+  const setPl = (p, fn) => upd(d=>{ d.priorityLists = {...(d.priorityLists||{})}; d.priorityLists[p] = fn([...(d.priorityLists[p]||[])]); });
+  const isIn = (x,k,tid) => x.t==="task" && x.k===k && x.tid===tid;
+  const togglePriority = (p,k,tid) => setPl(p, l=>l.some(x=>isIn(x,k,tid)) ? l.filter(x=>!isIn(x,k,tid)) : [...l,{id:uid(),t:"task",k,tid}]);
+  const addManual = (p,text) => setPl(p, l=>[...l,{id:uid(),t:"manual",text,done:false,at:Date.now()}]);
+  const toggleManual = (p,id) => setPl(p, l=>l.map(x=>x.id===id?{...x,done:!x.done}:x));
+  const promoteManual = (p,id,on) => setPl(p, l=>l.map(x=>x.id===id?{...x,p:!!on}:x));
+  const removePl = (p,id) => setPl(p, l=>l.filter(x=>x.id!==id));
+  const clearDonePl = p => setPl(p, l=>l.filter(x=>!(x.t==="manual"&&x.done)));
+  const reorderPl = (p,ids,mv) => setPl(p, l=>ids.map(id=>l.find(x=>x.id===id)).filter(Boolean).map(x=>mv&&x.id===mv.id?{...x,p:!!mv.p}:x).concat(l.filter(x=>!ids.includes(x.id))));
+  const convertManual = (p,it) => { const kind = clientTab==="social"?"social":clientTab; const cid = kind==="social"?socialActiveId:activeId; if(kind==="social") setSocialSub("board"); setListOpen(false); setCardCtx({kind,isNew:true,preset:{title:it.text.length>140?it.text.slice(0,137)+"...":it.text,notes:it.text.length>140?it.text:"",assignee:p,assignees:[p],fromPrio:{who:p,id:it.id},...(cid?{cId:cid}:{})}}); };
   const addPerson = name => { const n=(name||"").trim(); if(!n) return; upd(d=>{ if(!TEAM_BASE.concat(d.team||[]).some(p=>p.toLowerCase()===n.toLowerCase())) d.team=[...(d.team||[]),n]; }); applyTeam([...(data.team||[]),n]); };
   const backupFilename = `Digi-Unified-Backup_${today()}_v${(data.backupSeq||0)+1}.json`;
   const social = data.social;
@@ -3687,13 +4039,14 @@ function App() {
       arr.forEach(x=>{ if(x.parentId===id) x.parentId=null; });
       d[coll] = arr.filter(x=>x.id!==id);
     } else {
-      t.status = next;
-      if (next==="urgent" && t.urgent===-1) t.urgent=0;
+      const prev = t.status; t.status = next;
+      if (next==="urgent") { t.urgent=1; t.priority="urgent"; }
+      else if (prev==="urgent") { t.urgent=0; if (t.priority==="urgent") t.priority="high"; }
       if (["review","client","revision"].includes(next) && t.followUp===-1) t.followUp=0;
-      if (kind==="tech") { if(next==="review"||next==="awaiting") t.followUp=1; if(next==="urgent") t.urgent=1; }
+      if (kind==="tech") { if(next==="review"||next==="awaiting") t.followUp=1; }
     }
   });
-  const patchTask = (kind, id, patch) => upd(d=>{ const t=(d[KINDS[kind].coll]||[]).find(x=>x.id===id); if(t) Object.assign(t,patch); if(t && patch.cId){ t.parentId = patch.parentId!==undefined ? patch.parentId : null; (d[KINDS[kind].coll]||[]).forEach(x=>{ if(x.parentId===id) x.cId = patch.cId; }); } });
+  const patchTask = (kind, id, patch) => upd(d=>{ const t=(d[KINDS[kind].coll]||[]).find(x=>x.id===id); const wasU = t ? flagU(t) : false; if(t) Object.assign(t,patch); if(t && patch.priority!==undefined){ if(patch.priority==="urgent") t.urgent=1; else if(wasU) t.urgent = t.status==="urgent" ? -1 : 0; } if(t && patch.cId){ t.parentId = patch.parentId!==undefined ? patch.parentId : null; (d[KINDS[kind].coll]||[]).forEach(x=>{ if(x.parentId===id) x.cId = patch.cId; }); } });
   const addClientQuick = (kind, name) => {
     const id = (kind==="social"?"sm_":"")+uid(); const cols = ["#4f7fff","#30d158","#ff9f0a","#bf5af2","#ff3b30","#32ade6"];
     upd(d=>{
@@ -3708,8 +4061,9 @@ function App() {
     const id = uid();
     // Service tags decide the dashboard (creative, technical, ppc, social media). Only reroute when the client exists there.
     let kind = kind0;
-    const tk = kindFromTags(f.tags);
-    if (tk && tk!==kind0 && !f.parentId) {
+    const dk = dashKindsFromTags(f.tags);
+    const tk = dk.length && !dk.includes(kind0) ? dk[0] : null;
+    if (tk && !f.parentId) {
       const okClient = tk==="social" ? data.social.clients.some(c=>c.id===f.cId) : data.clients.some(c=>c.id===f.cId);
       if (okClient) kind = tk;
     }
@@ -3720,6 +4074,7 @@ function App() {
       const base = {id,cId:f.cId||activeId,title:f.title.trim(),status:f.status||"todo",assignee:f.assignee||"",assignees:Array.isArray(f.assignees)?f.assignees:asg(f),watchers:f.watchers||[],notes:f.notes||"",deadline:f.deadline||"",start:f.start||"",priority:f.priority||"normal",tags:f.tags||[],link:f.link||"",custom:f.custom||[],parentId:f.parentId||null,comments:[],createdAt:Date.now()};
       if (kind==="tech") Object.assign(base,{section:(f.tags||[]).includes("AI App Build")?"appbuild":((kind===kind0 && f.section)||"sites"),followUp:0,urgent:(f.status==="urgent")?1:0});
       else base.type = (kind===kind0 && f.type) ? f.type : KINDS[kind].defType;
+      if (f.priority==="urgent" || f.status==="urgent") { base.urgent=1; base.priority="urgent"; }
       d[coll].push(base);
     });
     return id;
@@ -3732,7 +4087,7 @@ function App() {
     arr.forEach(x=>{ if(x.parentId===id) x.parentId=null; });
     d[coll] = arr.filter(x=>x.id!==id);
   });
-  const toggleFlag = (kind,id,f) => upd(d=>{const t=(d[KINDS[kind].coll]||[]).find(t=>t.id===id); if(!t) return; if(f==="urgent"){ t.urgent = flagNext(flagU(t), t.status==="urgent"); } else { t.followUp = flagNext(flagF(kind,t), kind!=="tech" && isCRFollowUp(t)); } });
+  const toggleFlag = (kind,id,f) => upd(d=>{const t=(d[KINDS[kind].coll]||[]).find(t=>t.id===id); if(!t) return; if(f==="urgent"){ if(flagU(t)){ t.urgent = t.status==="urgent" ? -1 : 0; t.priority = "high"; } else { t.urgent = 1; t.priority = "urgent"; } } else { t.followUp = flagNext(flagF(kind,t), kind!=="tech" && isCRFollowUp(t)); } });
   const restoreEntry = (src, id) => upd(d=>{
     const a = (d[src]||[]).find(x=>x.id===id); if(!a) return;
     const k = kindOfEntry(a);
@@ -4108,18 +4463,39 @@ function App() {
       <div ref={toolsRef} style={{position:"relative"}}>
         <HBtn onClick={()=>setToolsOpen(o=>!o)} active={toolsOpen}>Menu</HBtn>
         {clientsFix && <ClientCleanup data={data} upd={upd} onClose={()=>setClientsFix(false)}/>}
+        {pwOpen && (
+          <Modal title="User Lists is locked" onClose={()=>setPwOpen(false)}>
+            <div style={{padding:"16px 18px 18px"}}>
+              <div style={{display:"inline-block",fontSize:10,fontWeight:800,letterSpacing:"0.07em",textTransform:"uppercase",color:"#fff",background:"#C23B2E",borderRadius:999,padding:"3px 10px",marginBottom:10}}>Under review / do not use</div>
+              <div style={{fontSize:13,color:T.text2,lineHeight:1.5,marginBottom:12}}>This page is a proof of concept for a new layout and is restricted to admins. Enter the admin password to open it.</div>
+              <div>
+                <input autoFocus type="password" value={pwTry} onChange={e=>{setPwTry(e.target.value);setPwErr(false);}} onKeyDown={e=>{ if(e.key==="Enter") tryUnlock(); }} placeholder="Admin password" style={{width:"100%",background:T.bg,border:`1px solid ${pwErr?"#C23B2E":T.border}`,borderRadius:12,padding:"10px 14px",color:T.text,fontSize:13.5,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                {pwErr && <div style={{fontSize:12,color:"#C23B2E",marginTop:6}}>Wrong password. Try again.</div>}
+                <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+                  <Btn onClick={()=>setPwOpen(false)}>Cancel</Btn>
+                  <Btn variant="primary" onClick={tryUnlock} disabled={!pwTry}>Unlock</Btn>
+                </div>
+              </div>
+            </div>
+          </Modal>)}
         {toolsOpen && (
           <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:210,zIndex:300,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:12,padding:4,boxShadow:"0 12px 36px rgba(0,0,0,.65)"}}>
             {[
-              {label:"Health snapshot",run:()=>{setFbOpen(false);setHealthOpen(true);setSearch("");}},
               {label:data.meetingMode?"Meeting mode: on":"Meeting mode: off",run:()=>upd(d=>{d.meetingMode=!d.meetingMode;})},
               {label:"Agency Tools",run:()=>{setClientTab("tech");setTechSub("agencytools");setSearch("");setAtPreset({v:"All",n:Date.now()});}},
               {label:"Subscriptions",run:()=>{setClientTab("tech");setTechSub("agencytools");setSearch("");setAtPreset({v:"__paid",n:Date.now()});}},
               {label:"Client Site Register",run:()=>{setClientTab("tech");setTechSub("register");setSearch("");}},
               {label:"Clean up clients",run:()=>setClientsFix(true)},
-              {label:"Client Spec Sheet",run:()=>{setClientTab("tech");setTechSub("spec");setSearch("");}}
+              {label:"Client Spec Sheet",run:()=>{setClientTab("tech");setTechSub("spec");setSearch("");}},
+              {label:"User Lists",badge:"Under review / do not use",sep:true,run:()=>{ if(listUnlocked) setListOpen(true); else { setPwTry(""); setPwErr(false); setPwOpen(true); } }}
             ].map(it=>(
-              <div key={it.label} onClick={()=>{setToolsOpen(false);if(!["Health snapshot","Bugs and ideas","Report a bug or idea"].includes(it.label)){setHealthOpen(false);setFbOpen(false);}it.run();}} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",fontSize:12.5,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.07)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{it.label}</div>
+              <div key={it.label}>
+                {it.sep && <div style={{height:1,background:T.border,margin:"4px 6px"}}/>}
+                <div onClick={()=>{setToolsOpen(false);if(!["Health snapshot","Bugs and ideas","Report a bug or idea"].includes(it.label)){setHealthOpen(false);setFbOpen(false);}it.run();}} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",fontSize:12.5,color:T.text,display:"flex",flexDirection:"column",gap:3}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.07)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}>{it.sep && <Icon n="star" size={12}/>}{it.label}</span>
+                  {it.badge && <span style={{alignSelf:"flex-start",fontSize:9.5,fontWeight:800,letterSpacing:"0.07em",textTransform:"uppercase",color:"#fff",background:"#C23B2E",borderRadius:999,padding:"2px 8px"}}>{it.badge}</span>}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -4197,8 +4573,12 @@ function App() {
   };
 
   // ── Board (two columns, flat rows; PPC keeps its section groups) ─────────
+  const nameOfC = (nk,cId) => { const c=((nk==="social"?data.social.clients:data.clients)||[]).find(x=>x.id===cId); return c?c.name:""; };
+  const sameClient = (nk,cId,k,target) => (nk==="social")===(k==="social") ? cId===target : (()=>{ const x=nameOfC(nk,cId), y=nameOfC(k,target); return !!x && !!y && normName(x)===normName(y); })();
+  const mirroredFor = (kind,targetId) => ["creative","tech","ppc","social"].filter(nk=>nk!==kind).flatMap(nk=>visibleOf(nk).filter(t=>!t.parentId && dashKinds(nk,t).includes(kind) && sameClient(nk,t.cId,kind,targetId)).map(t=>({...t,_nk:nk})));
   const renderBoard = kind => {
-    const all = visibleOf(kind).filter(i=>i.cId===boardActiveId);
+    const own = visibleOf(kind).filter(i=>i.cId===boardActiveId);
+    const all = [...own, ...mirroredFor(kind,boardActiveId)];
     const ids = new Set(all.map(i=>i.id));
     const SORT_RANK = {urgent:0,review:1,progress:2,revision:3,client:4,awaiting:4,todo:5,blocked:6,deliver:7,done:7,completed:8};
     const top = all.filter(i=>!i.parentId || !ids.has(i.parentId)).map((t,i)=>({t,i})).sort((a,b)=>((SORT_RANK[a.t.status]??9)-(SORT_RANK[b.t.status]??9))||a.i-b.i).map(x=>x.t);
@@ -4207,7 +4587,7 @@ function App() {
     const deleted = (data.deleted||[]).filter(a=>a.cId===boardActiveId && kindOfEntry(a)===kind);
     const rowProps = {kind,all,clients:boardClients,onOpen:t=>setCardCtx({kind,id:t.id}),onStatus:(id,n)=>changeStatus(kind,id,n),onToggleFollowUp:id=>toggleFlag(kind,id,"followUp"),onToggleUrgent:id=>toggleFlag(kind,id,"urgent"),highlightedId,hoveredId,setHoveredId,meetingMode:data.meetingMode};
     const cols = [{key:"review",title:"Review / Close Off",preset:{status:"review"}},{key:"active",title:"Active",preset:{status:"todo"}}];
-    const rowFor = t => <TaskRow key={t.id} task={t} {...rowProps}/>;
+    const rowFor = t => { const nk=t._nk||kind; const rpx = nk===kind ? rowProps : {...rowProps,kind:nk,all:visibleOf(nk),clients:nk==="social"?social.clients:data.clients,onOpen:x=>setCardCtx({kind:nk,id:x.id}),onStatus:(id,n)=>changeStatus(nk,id,n),onToggleFollowUp:id=>toggleFlag(nk,id,"followUp"),onToggleUrgent:id=>toggleFlag(nk,id,"urgent")}; return <TaskRow key={nk+t.id} task={t} {...rpx}/>; };
     const renderItems = items => {
       if (kind==="tech") {
         const apps = items.filter(i=>i.section==="appbuild"), rest = items.filter(i=>i.section!=="appbuild");
@@ -4245,7 +4625,7 @@ function App() {
       <div style={{height:"100%",display:"flex",flexDirection:"column",minHeight:0}}>
         <div style={{flex:1,minHeight:0,display:"grid",gridTemplateColumns:"1fr 1fr"}}>
           {cols.map((col,i)=>{
-            const items = top.filter(t=>colOf(kind,t.status)===col.key);
+            const items = top.filter(t=>colOf(t._nk||kind,t.status)===col.key);
             return (
               <div key={col.key} style={{minHeight:0,display:"flex",flexDirection:"column",borderLeft:i?`1px solid ${T.border}`:"none",padding:"20px 22px 0"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexShrink:0}}>
@@ -4495,10 +4875,10 @@ function App() {
     <>
       {cardCtx && (()=>{
         const kind = cardCtx.kind;
-        const common = {kind,onAddPerson:addPerson,onToggleFlag:f=>toggleFlag(kind,cardCtx.id,f),onAddClient:name=>addClientQuick(kind,name),clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
+        const common = {kind,onAddPerson:addPerson,priorityLists:data.priorityLists||{},onTogglePriority:p=>togglePriority(p,kind,cardCtx.id),onToggleFlag:f=>toggleFlag(kind,cardCtx.id,f),onAddClient:name=>addClientQuick(kind,name),clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
         if (cardCtx.isNew) {
           return <NewTaskDialog key="new" kind={kind} preset={cardCtx.preset} clients={isSocialBoard?socialBoardClients:sortedClients} people={people} activeId={boardActiveId} getParents={getParents(kind)} onAddClient={name=>addClientQuick(kind,name)} onAddPerson={addPerson} onClose={()=>setCardCtx(null)}
-            onCreate={(f,mode)=>{ const id=createTask(kind,f); if(!id) return; if(f.fromExtra) upd(d=>{ d.extras=(d.extras||[]).filter(z=>z.id!==f.fromExtra); }); const k=createdKind.current||kind; if(mode==="open") setCardCtx({kind:k,id}); else if(mode==="close") setCardCtx(null); }}/>;
+            onCreate={(f,mode)=>{ const id=createTask(kind,f); if(!id) return; if(f.fromExtra) upd(d=>{ d.extras=(d.extras||[]).filter(z=>z.id!==f.fromExtra); }); if(f.fromPrio) removePl(f.fromPrio.who,f.fromPrio.id); const k=createdKind.current||kind; if(mode==="open") setCardCtx({kind:k,id}); else if(mode==="close") setCardCtx(null); }}/>;
         }
         const task = listOf(kind).find(x=>x.id===cardCtx.id);
         if (!task) return null;
@@ -4598,15 +4978,16 @@ function App() {
       <aside style={{width:leftPanel?300:60,flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,overflow:"hidden",transition:"width .25s cubic-bezier(.32,.72,0,1)"}}>
         {leftPanel ? renderSidebar() : renderRail()}
       </aside>
-      <main style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,overflow:"hidden"}}>
+      <main style={{position:"relative",flex:1,minWidth:0,display:"flex",flexDirection:"column",background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,overflow:"hidden"}}>
+        {listOpen && <MyList all={allTasksFlat()} archive={data.archive||[]} people={people} who={listWho} setWho={setListWho} lists={data.priorityLists||{}} onOpen={(k,id)=>setCardCtx({kind:k,id})} onAddManual={addManual} onToggleManual={toggleManual} onPromote={promoteManual} onRemove={removePl} onReorder={reorderPl} onTogglePriority={togglePriority} onConvert={convertManual} onClearDone={clearDonePl} onClose={()=>setListOpen(false)}/>}
         {renderTopBar()}
         {healthOpen ? <HealthDash data={data} upd={upd} goTo={(k,t)=>{setHealthOpen(false);goTo(k,t);}}/> : fbOpen ? <FeedbackPage data={data} upd={upd} me={fbMe} setMe={setFbMe} ctx={fbCtx()} onReport={()=>setFbReport({})} onEditReport={e=>setFbReport({edit:e})} openIdProp={fbOpenId} clearOpenId={()=>setFbOpenId(null)}/> : <>
         {renderSubNav()}
         {renderHeader()}
         <div style={{flex:1,minHeight:0,background:T.bg,overflow:"hidden"}}>
           {inTasks && isBoard && ((isSocialBoard ? boardActiveId : client) ? renderBoard(clientTab) : <div style={{padding:24,color:T.text3,fontSize:13}}>Select a client from the sidebar.</div>)}
-          {inTasks && clientTab==="social" && socialSub==="overview" && <SocialDash social={social} upd={upd} activeId={socialActiveId} setActiveId={setSocialActiveId} sync={socialSync} retrySync={retrySocialSync}/>}
-          {clientTab!=="social" && effSub==="overview" && <SopLibrary key={clientTab} service={clientTab} data={data} upd={upd} client={client}/>}
+          {inTasks && clientTab==="social" && socialSub==="overview" && <OverviewShell service="social" label="Social overview" view={ovView("social")} setView={v=>setOvView("social",v)} data={data} upd={upd} goTo={goTo}><SocialDash social={social} upd={upd} activeId={socialActiveId} setActiveId={setSocialActiveId} sync={socialSync} retrySync={retrySocialSync}/></OverviewShell>}
+          {clientTab!=="social" && effSub==="overview" && <div style={{height:"100%",display:"flex",flexDirection:"column",minHeight:0}}><HealthDash key={clientTab} data={data} upd={upd} goTo={goTo} lockSvc={clientTab} leftSlot={<span style={{fontSize:20,fontWeight:700,color:T.text,marginRight:6}}>{({creative:"Creative",tech:"Technical",ppc:"PPC"})[clientTab]} health</span>}/></div>}
           {clientTab==="tech" && techSub==="agencytools" && <AgencyTools key={atPreset.n} initialView={atPreset.v} data={data} upd={upd}/>}
           {clientTab==="tech" && techSub==="tools" && <div style={{height:"100%",background:T.surface}}>{renderTechTools()}</div>}
           {clientTab==="tech" && techSub==="register" && <div style={{height:"100%",background:T.bg}}><SiteRegister data={data} upd={upd} openClient={(id,tab)=>{setActiveId(id);setSuperComms(tab||"overview");}} draftClient={srDraft} onDraftUsed={()=>setSrDraft(null)}/></div>}
@@ -4614,7 +4995,7 @@ function App() {
         </div></>}
       </main>
       {fbReport && <FeedbackReport data={data} upd={upd} me={fbMe} setMe={setFbMe} ctx={fbCtx()} edit={fbReport.edit} startType={fbReport.type} onClose={ok=>{ setFbReport(null); if(ok && !fbReport.edit) { setHealthOpen(false); setFbOpen(true); } }} onVote={(id,name)=>upd(d=>{ const x=(d.feedback||[]).find(z=>z.id===id); if(x){ x.votes=x.votes||{}; x.votes[name]=Date.now(); x.updatedAt=Date.now(); } })}/>}
-      {clientTab==="social" && socialSub==="overview" && socialClient && <SocialPanel key={socialClient.id} client={socialClient} upd={upd} onClose={()=>setSocialActiveId(null)}/>}
+      {clientTab==="social" && socialSub==="overview" && ovView("social")!=="health" && socialClient && <SocialPanel key={socialClient.id} client={socialClient} upd={upd} onClose={()=>setSocialActiveId(null)}/>}
       {renderModals()}
     </div>
   );
