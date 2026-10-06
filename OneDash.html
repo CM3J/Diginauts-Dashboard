@@ -396,7 +396,81 @@ function TagPicker({tags, onChange}) {
     </div>
   );
 }
-const TEAM = ["Aaron","Anna","Conner","Craig","Don","Kate","Kelly","Nadya","Reyner","Ryan"];
+const TEAM_BASE = ["Aaron","Anna","Conner","Craig","Don","Kate","Kelly","Nadya","Reyner","Ryan"];
+const TEAM = [...TEAM_BASE];
+function applyTeam(extra) { const s=[...new Set([...TEAM_BASE,...((extra||[]).map(x=>String(x).trim()).filter(Boolean))])].sort((a,b)=>a.localeCompare(b)); if (s.join("|")===TEAM.join("|")) return; TEAM.length=0; s.forEach(x=>TEAM.push(x)); }
+const ASG_SPLIT = /\s*(?:[\/,&+;]|\s+and\s+|\s+x\s+)\s*/i;
+// Assignees of a task: the new array, or the old free-text field parsed into team names (nothing is lost, unknown names stay on the task only)
+function asg(t) {
+  if (!t) return [];
+  if (Array.isArray(t.assignees)) return t.assignees;
+  const out = [];
+  String(t.assignee||"").split(ASG_SPLIT).map(x=>x.trim()).filter(Boolean).forEach(tok=>{
+    const m = TEAM.find(p=>p.toLowerCase()===tok.toLowerCase()) || TEAM.find(p=>p.toLowerCase().split(" ")[0]===tok.toLowerCase());
+    const n = m||tok; if (!out.includes(n)) out.push(n);
+  });
+  return out;
+}
+const wch = t => (t&&Array.isArray(t.watchers))?t.watchers:[];
+// Meeting flags: a task is flagged by its flag field or, for urgent / review style statuses, by its status. -1 means switched off by hand.
+const flagU = t => t.urgent===1 || (t.urgent!==-1 && t.status==="urgent");
+const flagF = (kind,t) => t.followUp===1 || (t.followUp!==-1 && kind!=="tech" && isCRFollowUp(t));
+const flagNext = (on, derived) => on ? (derived?-1:0) : 1;
+const safeUrl = u => { u=(u||"").trim(); if(!u) return ""; return /^https?:\/\//i.test(u)?u:"https://"+u.replace(/^\/+/,""); };
+const openUrl = u => { const x=safeUrl(u); if(x) window.open(x,"_blank","noopener"); };
+const FLAG_F_LABEL = "Follow-up / Discuss";
+function AvatarStack({names, size=18}) {
+  return <span style={{display:"inline-flex",alignItems:"center"}}>{names.slice(0,4).map((n,i)=><span key={n} style={{marginLeft:i?-5:0,display:"inline-flex",boxShadow:`0 0 0 2px ${T.surface}`,borderRadius:"50%"}}><Avatar name={n} size={size}/></span>)}{names.length>4 && <span style={{fontSize:10,color:T.text3,marginLeft:4}}>+{names.length-4}</span>}</span>;
+}
+function PeoplePicker({value, onChange, people, onAddPerson, addLabel="Add", inline}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [nn, setNn] = useState("");
+  const sel = value||[];
+  const toggle = p => onChange(sel.includes(p)?sel.filter(x=>x!==p):[...sel,p]);
+  const ql = q.trim().toLowerCase();
+  const list = people.filter(p=>!ql||p.toLowerCase().includes(ql));
+  const addNew = () => { const n=nn.trim().replace(/\s+/g," "); if(!n) return; const canon=people.find(p=>p.toLowerCase()===n.toLowerCase()); const name=canon||n; if(!canon && onAddPerson) onAddPerson(name); if(!sel.includes(name)) onChange([...sel,name]); setNn(""); setAdding(false); };
+  const close = () => { setOpen(false); setAdding(false); setQ(""); setNn(""); };
+  const inp = {width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,outline:"none",color:T.text,fontSize:12.5,fontFamily:"inherit",padding:"6px 9px"};
+  const panel = (<>
+        <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search team" style={{...inp,marginBottom:5}}/>
+        <div style={{maxHeight:250,overflowY:"auto"}}>
+          {list.length===0 && <div style={{fontSize:12,color:T.text4,padding:"6px 8px"}}>No match</div>}
+          {list.map(p=>{ const on=sel.includes(p); return (
+            <div key={p} onClick={()=>toggle(p)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?"#30d158":T.border2}`,background:on?"#30d158":"transparent",color:"#0e0e0e",fontSize:11,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+              <Avatar name={p} size={20}/>{p}
+            </div>); })}
+        </div>
+        <div style={{borderTop:`1px solid ${T.border}`,marginTop:5,paddingTop:5}}>
+          {!adding ? (
+            <div onClick={()=>setAdding(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:13,color:T.text2}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon n="plus" size={13}/>Add new person</div>
+          ) : (
+            <div style={{display:"flex",gap:5,padding:"2px"}}>
+              <input autoFocus value={nn} onChange={e=>setNn(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") addNew(); if(e.key==="Escape") setAdding(false); }} placeholder="Full name, Enter" style={inp}/>
+              <button type="button" onClick={addNew} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:8,padding:"0 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Add</button>
+            </div>
+          )}
+        </div>
+  </>);
+  if (inline) return <div>{panel}</div>;
+  return (
+    <span style={{position:"relative",display:"inline-flex",alignItems:"center",flexWrap:"wrap",gap:5}}>
+      {sel.map(p=>{ const known=people.includes(p); return (
+        <span key={p} title={known?p:"Not in the team list. Remove it or pick a team member."} style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(var(--ovc),.07)",border:`1px ${known?"solid":"dashed"} ${known?T.border:"var(--warn)"}`,borderRadius:999,padding:"2px 4px 2px 3px",fontSize:12,color:T.text}}>
+          <Avatar name={p} size={17}/>{p}
+          <button type="button" title="Remove" onClick={()=>toggle(p)} style={{background:"none",border:"none",color:T.text3,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 3px"}}>×</button>
+        </span>); })}
+      <button type="button" onClick={()=>setOpen(o=>!o)} style={{background:"transparent",border:`1px dashed ${T.border2}`,borderRadius:999,padding:"2px 10px",fontSize:11,color:T.text3,cursor:"pointer",fontFamily:"inherit"}}>{sel.length?"+":"+ "+addLabel}</button>
+      <Pop open={open} onClose={close} width={230} align="right">
+        {panel}
+      </Pop>
+    </span>
+  );
+}
+
 
 // ── Icons, helpers, generic task components ────────────────────────────────
 
@@ -572,14 +646,15 @@ function HoverCard({task, kind, client, rect, onEnter, onLeave, onFlag, onComple
       <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
         <div style={{fontWeight:700,fontSize:14,color:T.text,lineHeight:1.3,flex:1,minWidth:0}}>{task.title}</div>
         <div style={{display:"flex",gap:4,flexShrink:0}}>
-          {[["Flag","flag",onFlag],["Mark complete","check",onComplete],["Edit","edit",onEdit]].map(([t,ic,fn])=>fn && <button key={t} title={t} onClick={fn} style={{background:"rgba(var(--ovc),.06)",border:`1px solid ${T.border}`,cursor:"pointer",color:T.text2,padding:"4px 6px",lineHeight:1,borderRadius:6,display:"inline-flex",alignItems:"center"}}><Icon n={ic} size={12}/></button>)}
+          {[["Flag","flag",onFlag],["Open S.Comms task","link",task.link?()=>openUrl(task.link):null],["Mark complete","check",onComplete],["Edit","edit",onEdit]].map(([t,ic,fn])=>fn && <button key={t} title={t} onClick={fn} style={{background:"rgba(var(--ovc),.06)",border:`1px solid ${T.border}`,cursor:"pointer",color:T.text2,padding:"4px 6px",lineHeight:1,borderRadius:6,display:"inline-flex",alignItems:"center"}}><Icon n={ic} size={12}/></button>)}
         </div>
       </div>
       <div style={{fontSize:11,color:T.text3,margin:"3px 0 8px"}}>In {client?client.name:"No client"} · {KINDS[kind].label}</div>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:stColor}}>
         <span style={{width:8,height:8,borderRadius:"50%",border:`2px solid ${stColor}`}}/>{st.label}
       </div>
-      {task.assignee && <HoverRow icon="user"><Avatar name={task.assignee} size={16}/>{task.assignee}</HoverRow>}
+      {asg(task).length>0 && <HoverRow icon="user"><AvatarStack names={asg(task)} size={16}/>{asg(task).join(", ")}</HoverRow>}
+      {wch(task).length>0 && <HoverRow icon="users">Watching: {wch(task).join(", ")}</HoverRow>}
       {(task.start||task.deadline) && <HoverRow icon="calendar"><span style={{color:isOverdue(task.deadline)?"#ff6b6b":T.text2}}>{task.start?fmtDate(task.start)+" → ":""}{task.deadline?fmtDate(task.deadline):"No due date"}</span></HoverRow>}
       {pr && <HoverRow icon="flag"><span style={{color:pr.color,fontWeight:600}}>{pr.label}</span></HoverRow>}
       {subs>0 && <HoverRow icon="subtask">{subs} subtask{subs>1?"s":""}</HoverRow>}
@@ -625,8 +700,8 @@ function TaskRow({task, kind, all, clients, depth=0, onOpen, onStatus, onToggleF
   const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(()=>{ setHoveredId(null); setCardRect(null); },160); };
   const hardLeave = () => { clearTimeout(timer.current); setHoveredId(null); setCardRect(null); };
   const keep = () => { clearTimeout(timer.current); setHoveredId(task.id); };
-  const isU = kind==="tech" ? task.urgent===1 : isUrgent(task);
-  const isF = kind==="tech" ? task.followUp===1 : isCRFollowUp(task);
+  const isU = flagU(task);
+  const isF = flagF(kind,task);
   const openFlag = e => {e.stopPropagation();setFlagAnchor(e.currentTarget.getBoundingClientRect());setFlagOpen(true);};
   const mini = {background:"rgba(var(--ovc),.06)",border:`1px solid ${T.border}`,cursor:"pointer",color:T.text2,padding:"3px 6px",lineHeight:1,borderRadius:6,fontFamily:"inherit",display:"inline-flex",alignItems:"center"};
   return (
@@ -641,21 +716,22 @@ function TaskRow({task, kind, all, clients, depth=0, onOpen, onStatus, onToggleF
           {cmts>0 && <span title="Comments" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:T.text3}}><Icon n="comment" size={12}/>{cmts}</span>}
           <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
             {hov && <button title="Flag" onClick={openFlag} style={mini}><Icon n="flag" size={12}/></button>}
+            {hov && task.link && <button title="Open S.Comms task" onClick={e=>{e.stopPropagation();openUrl(task.link);}} style={mini}><Icon n="link" size={12}/></button>}
             {hov && <button title="Mark complete" onClick={e=>{e.stopPropagation();onStatus(task.id,"completed");}} style={mini}><Icon n="check" size={12}/></button>}
             {hov && <button title="Edit" onClick={e=>{e.stopPropagation();onOpen(task);}} style={mini}><Icon n="edit" size={12}/></button>}
             <div onClick={e=>e.stopPropagation()}><StatusPill cfg={KINDS[kind].cfg} status={task.status} onChange={v=>onStatus(task.id,v)} compact/></div>
           </div>
         </div>
-        {(task.assignee || task.deadline || task.notes) && (
+        {(asg(task).length>0 || task.deadline || task.notes) && (
           <div style={{display:"flex",alignItems:"center",gap:10,marginTop:4,paddingLeft:11}}>
-            {task.assignee && <span style={{fontSize:11,color:T.text3}}>{task.assignee}</span>}
+            {asg(task).length>0 && <span style={{fontSize:11,color:T.text3,display:"inline-flex",alignItems:"center",gap:5}}><AvatarStack names={asg(task)} size={14}/>{asg(task).join(", ")}</span>}
             {task.deadline && <span style={{fontSize:11,color:isOverdue(task.deadline)?"#ff6b6b":T.text3}}>{fmtDate(task.deadline)}</span>}
             {task.notes && <span style={{fontSize:11,color:T.text4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{task.notes}</span>}
           </div>
         )}
       </div>
       {cardRect && !flagOpen && <HoverCard task={{...task,_subCount:children.length}} kind={kind} client={client} rect={cardRect} onEnter={keep} onLeave={leave} onFlag={openFlag} onComplete={()=>{hardLeave();onStatus(task.id,"completed");}} onEdit={()=>{hardLeave();onOpen(task);}}/>}
-      {flagOpen && <FlagPanel task={task} onToggleFollowUp={()=>onToggleFollowUp(task.id)} onToggleUrgent={()=>onToggleUrgent(task.id)} onClose={()=>setFlagOpen(false)} anchorRect={flagAnchor}/>}
+      {flagOpen && <FlagPanel task={{...task,urgent:isU?1:0,followUp:isF?1:0}} onToggleFollowUp={()=>onToggleFollowUp(task.id)} onToggleUrgent={()=>onToggleUrgent(task.id)} onClose={()=>setFlagOpen(false)} anchorRect={flagAnchor}/>}
       {children.map(child=>(
         <TaskRow key={child.id} task={child} kind={kind} all={all} clients={clients} depth={depth+1} onOpen={onOpen} onStatus={onStatus} onToggleFollowUp={onToggleFollowUp} onToggleUrgent={onToggleUrgent} highlightedId={highlightedId} hoveredId={hoveredId} setHoveredId={setHoveredId} meetingMode={meetingMode}/>
       ))}
@@ -756,9 +832,9 @@ function TaskLinks({kind, task, allTasks, onLink, onUnlink, onOpen}) {
   );
 }
 
-function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onAddClient, allTasks, onLink, onUnlink, onOpenLinked, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
+function TaskCard({kind, task, preset, isNew, clients, people, activeId, getParents, onAddClient, allTasks, onLink, onUnlink, onOpenLinked, onAddPerson, onToggleFlag, onClose, onPatch, onStatus, onCreate, onDelete, onArchive, subtasks, onOpenTask, onAddSub, onAddComment, onDeleteComment}) {
   const cfg = KINDS[kind].cfg;
-  const [draft, setDraft] = useState(()=>({title:"",status:"todo",assignee:"",start:"",deadline:"",priority:"normal",tags:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,...(preset||{})}));
+  const [draft, setDraft] = useState(()=>({title:"",status:"todo",assignee:"",assignees:[],watchers:[],start:"",deadline:"",priority:"normal",tags:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,...(preset||{})}));
   const t = isNew ? draft : task;
   const set = (k,v) => isNew ? setDraft(d=>({...d,[k]:v})) : onPatch(task.id,{[k]:v});
   const [tagPop, setTagPop] = useState(false);
@@ -766,6 +842,9 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
   const [cmt, setCmt] = useState("");
   const [menu, setMenu] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(true);
+  const [linkPop, setLinkPop] = useState(false);
+  const [linkVal, setLinkVal] = useState("");
+  const setPeople = (key,list) => { const patch = key==="assignees" ? {assignees:list, assignee:list.join(", ")} : {watchers:list}; if(isNew) setDraft(d=>({...d,...patch})); else onPatch(task.id,patch); };
   const titleRef = useRef();
   useEffect(()=>{ if(isNew && titleRef.current) titleRef.current.focus(); },[]);
   useEffect(()=>{ const h = e => { if(e.key==="Escape") onClose(); }; window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); },[]);
@@ -785,6 +864,28 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0,fontSize:12,color:T.text2}}>
           <ClientPicker clients={clients} value={t.cId} onAdd={onAddClient} onPick={id=>{ set("cId",id); if(isNew) set("parentId",null); }} trigger={tg=><button type="button" onClick={tg} title="Change client" style={{background:"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"3px 10px 3px 6px",cursor:"pointer",fontFamily:"inherit",fontSize:12,color:T.text,display:"inline-flex",alignItems:"center",gap:6}}>{client ? <span style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:600,color:T.text}}><span style={{width:18,height:18,borderRadius:5,background:client.color||T.accent,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff"}}>{ini(client.name)}</span>{client.name}</span> : <span>Choose client</span>}<span style={{fontSize:9,opacity:.6}}>▼</span></button>}/>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,position:"relative"}}>
+            {!isNew && (()=>{ const on1=flagU(t), on2=flagF(kind,t); const fb=(on,col,label,fl,title)=>(
+              <button type="button" title={title} onClick={()=>onToggleFlag(fl)} style={{display:"inline-flex",alignItems:"center",gap:5,background:on?col+"33":"transparent",border:`1px solid ${on?col:T.border2}`,color:on?col:T.text3,borderRadius:999,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><Icon n="flag" size={11}/>{label}</button>);
+              return <>{fb(on1,"#ff3b30","Urgent","urgent","Meeting flag: Urgent")}{fb(on2,"#ff9f0a",FLAG_F_LABEL,"followUp","Meeting flag: "+FLAG_F_LABEL)}</>; })()}
+            {!isNew && (
+              <span style={{position:"relative",display:"inline-flex",alignItems:"center",gap:4}}>
+                {t.link ? <>
+                  <button type="button" title={safeUrl(t.link)} onClick={()=>openUrl(t.link)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(79,127,255,.16)",border:"1px solid rgba(79,127,255,.5)",color:"#7aa2ff",borderRadius:999,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><Icon n="link" size={11}/>S.Comms task</button>
+                  <button type="button" title="Edit link" onClick={()=>{setLinkVal(t.link||"");setLinkPop(o=>!o);}} style={{background:"transparent",border:"none",cursor:"pointer",color:T.text3,padding:4,display:"flex"}}><Icon n="edit" size={12}/></button>
+                </> : <button type="button" title="Add the S.Comms task link" onClick={()=>{setLinkVal("");setLinkPop(o=>!o);}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:`1px dashed ${T.border2}`,color:T.text3,borderRadius:999,padding:"3px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}><Icon n="link" size={11}/>S.Comms link</button>}
+                <Pop open={linkPop} onClose={()=>setLinkPop(false)} width={290} align="right">
+                  <div style={{padding:"4px"}}>
+                    <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>S.Comms task link</div>
+                    <input autoFocus value={linkVal} onChange={e=>setLinkVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ set("link",safeUrl(linkVal)); setLinkPop(false); } }} placeholder="Paste the S.Comms task URL" style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,outline:"none",color:T.text,fontSize:12.5,fontFamily:"inherit",padding:"7px 10px"}}/>
+                    <div style={{display:"flex",gap:6,marginTop:8}}>
+                      <Btn size="sm" variant="primary" onClick={()=>{ set("link",safeUrl(linkVal)); setLinkPop(false); }}>Save</Btn>
+                      {safeUrl(linkVal) && <Btn size="sm" onClick={()=>openUrl(linkVal)}>Open in new tab</Btn>}
+                      {t.link && <Btn size="sm" onClick={()=>{ set("link",""); setLinkPop(false); }}>Remove</Btn>}
+                    </div>
+                  </div>
+                </Pop>
+              </span>
+            )}
             {!isNew && (
               <>
                 <button title="More" onClick={()=>setMenu(m=>!m)} style={{background:"transparent",border:"none",cursor:"pointer",color:T.text2,padding:6,borderRadius:8,display:"flex"}}><Icon n="more" size={16}/></button>
@@ -825,12 +926,11 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
                   </PropRow>
                 </div>
                 <div>
-                  <PropRow icon="users" label="Assignee">
-                    {t.assignee && <Avatar name={t.assignee} size={20}/>}
-                    <select className="ghost-in" value={t.assignee||""} onChange={e=>set("assignee",e.target.value)} style={{...selStyle,flex:1,minWidth:0}}>
-                      <option value="">Unassigned</option>
-                      {[...people,...((t.assignee&&!people.includes(t.assignee))?[t.assignee]:[])].map(p=><option key={p} value={p}>{p}</option>)}
-                    </select>
+                  <PropRow icon="users" label="Assignees">
+                    <PeoplePicker value={asg(t)} onChange={l=>setPeople("assignees",l)} people={people} onAddPerson={onAddPerson} addLabel="Assign"/>
+                  </PropRow>
+                  <PropRow icon="users" label="Watchers">
+                    <PeoplePicker value={wch(t)} onChange={l=>setPeople("watchers",l)} people={people} onAddPerson={onAddPerson} addLabel="Watch"/>
                   </PropRow>
                   <PropRow icon="flag" label="Priority">
                     <Icon n="flag" size={14} style={{color:PR[t.priority||"normal"].color}}/>
@@ -858,7 +958,7 @@ function TaskCard({kind, task, preset, isNew, clients, people, activeId, getPare
                     <div key={s.id} onClick={()=>onOpenTask(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.04)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                       <span style={{width:8,height:8,borderRadius:"50%",background:statusOf(kind,s.status).bg,flexShrink:0}}/>
                       <span style={{flex:1,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</span>
-                      {s.assignee && <Avatar name={s.assignee} size={18}/>}
+                      {asg(s).length>0 && <AvatarStack names={asg(s)} size={18}/>}
                       <div onClick={e=>e.stopPropagation()}><StatusPill cfg={cfg} status={s.status} onChange={v=>onStatus(s.id,v)} compact/></div>
                     </div>
                   ))}
@@ -938,9 +1038,9 @@ const NT_TEMPLATES = [
   {label:"Weekly report",title:"Weekly report",tags:["report"]}
 ];
 
-function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onClose, onCreate, onAddClient}) {
+function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onClose, onCreate, onAddClient, onAddPerson}) {
   const cfg = KINDS[kind].cfg.filter(s=>!s.action && s.key!=="completed");
-  const [d, setD] = useState(()=>({title:"",status:"todo",assignee:CURRENT_USER,start:"",deadline:"",priority:"normal",tags:SERVICE_TAG[kind]?[SERVICE_TAG[kind]]:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,custom:[],...(preset||{})}));
+  const [d, setD] = useState(()=>({title:"",status:"todo",assignee:CURRENT_USER,assignees:[CURRENT_USER],watchers:[],start:"",deadline:"",priority:"normal",tags:SERVICE_TAG[kind]?[SERVICE_TAG[kind]]:[],link:"",notes:"",cId:activeId,type:KINDS[kind].defType,section:"sites",parentId:null,custom:[],...(preset||{})}));
   const set = (k,v) => setD(x=>({...x,[k]:v}));
   const [pop, setPop] = useState(null);
   const [tagIn, setTagIn] = useState("");
@@ -954,7 +1054,9 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
   const pr = PR[d.priority||"normal"];
   const secList = kind==="ppc" ? PPC_SECTIONS : kind==="tech" ? TASK_SECTIONS : null;
   const secF = kind==="tech" ? "section" : "type";
-  const ok = !!d.title.trim() && !!d.assignee.trim();
+  const dAsg = asg(d);
+  const ok = !!d.title.trim() && dAsg.length>0;
+  const setPpl = (key,list) => setD(x=>({...x,...(key==="assignees"?{assignees:list,assignee:list.join(", ")}:{watchers:list})}));
   const create = mode => { if(!ok) return; onCreate({...d,custom:(d.custom||[]).filter(f=>f.name)}, mode); };
   const togglePop = k => setPop(p=>p===k?null:k);
   const row = (children) => <div style={{position:"relative"}}>{children}</div>;
@@ -982,12 +1084,15 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
               <Pop open={pop==="status"} onClose={()=>setPop(null)} width={200}>{cfg.map(s=>opt(s.key===d.status,()=>{set("status",s.key);setPop(null);},<><span style={{width:8,height:8,borderRadius:"50%",background:s.bg}}/>{s.label}</>))}</Pop>
             </>)}
             {row(<>
-              <Chip icon="user" onClick={()=>togglePop("assignee")} active={!!d.assignee} label={d.assignee||"Assignee"}>{!d.assignee && <span style={{color:"#ff453a",marginLeft:-3}}>*</span>}</Chip>
-              <Pop open={pop==="assignee"} onClose={()=>setPop(null)} width={240} up>
-                <input autoFocus value={d.assignee} onChange={e=>set("assignee",e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") setPop(null); }} placeholder="Type a name" style={{...inS,marginBottom:6}}/>
-                <div style={{maxHeight:140,overflowY:"auto"}}>
-                {people.filter(p=>p.toLowerCase().includes(d.assignee.toLowerCase())).map(p=>opt(p===d.assignee,()=>{set("assignee",p);setPop(null);},<><Avatar name={p} size={20}/>{p}</>))}
-                </div>
+              <Chip icon="user" onClick={()=>togglePop("assignee")} active={dAsg.length>0} label={dAsg.length?dAsg.join(", "):"Assignees"}>{!dAsg.length && <span style={{color:"#ff453a",marginLeft:-3}}>*</span>}</Chip>
+              <Pop open={pop==="assignee"} onClose={()=>setPop(null)} width={260} up>
+                <PeoplePicker inline value={dAsg} onChange={l=>setPpl("assignees",l)} people={people} onAddPerson={onAddPerson}/>
+              </Pop>
+            </>)}
+            {row(<>
+              <Chip icon="users" onClick={()=>togglePop("watchers")} active={wch(d).length>0} label={wch(d).length?"Watchers: "+wch(d).join(", "):"Watchers"}/>
+              <Pop open={pop==="watchers"} onClose={()=>setPop(null)} width={260} up>
+                <PeoplePicker inline value={wch(d)} onChange={l=>setPpl("watchers",l)} people={people} onAddPerson={onAddPerson}/>
               </Pop>
             </>)}
             {row(<>
@@ -1040,7 +1145,7 @@ function NewTaskDialog({kind, preset, clients, people, activeId, getParents, onC
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center"}}>
             <div style={{position:"relative",display:"flex"}}>
-              <button type="button" disabled={!ok} title={ok?"":"Add a task name and an assignee"} onClick={()=>create("open")} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:"999px 0 0 999px",padding:"9px 20px",fontSize:13,fontWeight:700,cursor:ok?"pointer":"not-allowed",opacity:ok?1:.5,fontFamily:"inherit"}}>Create task</button>
+              <button type="button" disabled={!ok} title={ok?"":"Add a task name and at least one assignee"} onClick={()=>create("open")} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderRadius:"999px 0 0 999px",padding:"9px 20px",fontSize:13,fontWeight:700,cursor:ok?"pointer":"not-allowed",opacity:ok?1:.5,fontFamily:"inherit"}}>Create task</button>
               <button type="button" disabled={!ok} onClick={()=>togglePop("create")} style={{background:"var(--inv)",color:"var(--inv-fg)",border:"none",borderLeft:"1px solid var(--border2)",borderRadius:"0 999px 999px 0",padding:"9px 12px",cursor:ok?"pointer":"not-allowed",opacity:ok?1:.5,display:"flex",alignItems:"center"}}><Icon n="chevron" size={13} style={{transform:"rotate(90deg)"}}/></button>
               <Pop open={pop==="create"} onClose={()=>setPop(null)} width={200} align="right" up>
                 {opt(false,()=>{setPop(null);create("open");},"Create and open")}
@@ -1865,13 +1970,13 @@ const SYNC_DOCS = {
   },
   extras: {
     coll:"creative", field:"onedash-extras-v1",
-    proj: d => J({flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
+    proj: d => J({team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]}),
     apply: (nd, p) => {
-      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])]; nd.flagOrder = {...(nd.flagOrder||{}), ...(p.flagOrder||{})};
+      nd.ppcItems = p.ppcItems||[]; nd.socialItems = p.socialItems||[]; nd.extras = p.extras||[]; nd.techOpts = p.techOpts||{}; nd.clientMerges = {...(nd.clientMerges||{}), ...(p.clientMerges||{})}; nd.hiddenClients = [...new Set([...(nd.hiddenClients||[]), ...(p.hiddenClients||[])])]; nd.flagOrder = {...(nd.flagOrder||{}), ...(p.flagOrder||{})}; nd.team = [...new Set([...(nd.team||[]), ...(p.team||[])])]; nd.meetingLinks = {...(nd.meetingLinks||{}), ...(p.meetingLinks||{})};
       nd.archive = [...(nd.archive||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.archive||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
       nd.deleted = [...(nd.deleted||[]).filter(a=>!["ppc","social"].includes(kindOfEntry(a))), ...(p.deleted||[]).map(a=>({...a,kind:a.kind||"ppc"}))];
     },
-    build: (base, d) => ({...base, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
+    build: (base, d) => ({...base, team:d.team||[], meetingLinks:d.meetingLinks||{}, flagOrder:d.flagOrder||{}, hiddenClients:d.hiddenClients||[], clientMerges:d.clientMerges||{}, ppcItems:d.ppcItems, socialItems:d.socialItems, extras:d.extras, techOpts:d.techOpts, archive:[...byKind(d.archive,"ppc"),...byKind(d.archive,"social")], deleted:[...byKind(d.deleted,"ppc"),...byKind(d.deleted,"social")]})
   },
   feedback: {
     coll:"creative", field:"onedash-feedback-v1", refetch:true,
@@ -2947,27 +3052,42 @@ function SocialSidebarItem({c, onClick, note}) {
   );
 }
 
-function SidebarGroup({label, color, count, children}) {
+function SidebarGroup({label, color, count, children, defaultOpen=false}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div style={{marginBottom:16}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7,padding:"0 2px"}}>
+    <div style={{marginBottom:open?16:8}}>
+      <div onClick={()=>setOpen(o=>!o)} role="button" aria-expanded={open} style={{display:"flex",alignItems:"center",gap:6,marginBottom:open?7:0,padding:"4px 2px",cursor:"pointer",userSelect:"none"}}>
+        <Icon n="chevron" size={10} style={{color:T.text3,transform:`rotate(${open?0:-90}deg)`,transition:"transform .15s"}}/>
         <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color,textTransform:"uppercase"}}>{label}</span>
         <span style={{fontSize:9,fontWeight:700,color,background:"rgba(var(--ovc),.07)",borderRadius:10,padding:"1px 6px"}}>{count}</span>
       </div>
-      {children}
+      {open && children}
     </div>
   );
 }
 
-function ExtraItem({e, client, onToggle, onRemove, onOpen}) {
+function ExtraItem({e, client, onToggle, onRemove, onOpen, onConvert}) {
+  const [menu, setMenu] = useState(false);
+  const ref = useRef();
+  useEffect(()=>{ if(!menu) return; const h = ev => { if(ref.current && !ref.current.contains(ev.target)) setMenu(false); }; document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h); },[menu]);
+  const item = {display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,cursor:"pointer",fontSize:12,color:T.text};
   return (
-    <div className="cm" style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 8px",borderRadius:10,background:"rgba(var(--ovc),.03)",border:`1px solid ${T.border}`,marginBottom:5}}>
-      <button onClick={onToggle} title={e.done?"Mark open":"Mark done"} style={{width:16,height:16,borderRadius:"50%",border:`1.5px solid ${e.done?"#30d158":T.border2}`,background:e.done?"#30d158":"transparent",color:"#0e0e0e",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{e.done && <Icon n="check" size={10} style={{strokeWidth:3}}/>}</button>
+    <div className="cm" style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 8px",borderRadius:10,background:"rgba(var(--ovc),.03)",border:`1px solid ${T.border}`,marginBottom:5,position:"relative"}}>
+      <button onClick={onToggle} title={e.done?"Mark open":"Mark done"} style={{width:16,height:16,borderRadius:"50%",border:`1.5px solid ${e.done?"#30d158":T.border2}`,background:e.done?"#30d158":"transparent",color:"#0e0e0e",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{e.done && <Icon n="check" size={10}/>}</button>
       <div onClick={onOpen} style={{flex:1,minWidth:0,cursor:client?"pointer":"default"}}>
         <div style={{fontSize:12,color:e.done?T.text3:T.text,textDecoration:e.done?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{e.text}</div>
         <div style={{fontSize:10,color:T.text4,marginTop:2}}>{client?client.name+" · ":""}{timeAgo(e.at)}</div>
       </div>
-      <button className="cm-x" onClick={onRemove} title="Remove" style={{background:"none",border:"none",cursor:"pointer",color:T.text3,padding:0,display:"flex",marginTop:2}}><Icon n="x" size={12}/></button>
+      <div ref={ref} style={{position:"relative",flexShrink:0}}>
+        <button title="More" onClick={()=>setMenu(m=>!m)} style={{background:"none",border:"none",cursor:"pointer",color:T.text3,padding:2,display:"flex"}}><Icon n="more" size={15}/></button>
+        {menu && (
+          <div style={{position:"absolute",top:"100%",right:0,zIndex:60,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:10,padding:4,minWidth:170,boxShadow:"0 10px 30px rgba(0,0,0,.6)"}}>
+            <div onClick={()=>{setMenu(false);onConvert();}} style={item} onMouseEnter={x=>x.currentTarget.style.background="rgba(var(--ovc),.07)"} onMouseLeave={x=>x.currentTarget.style.background="transparent"}><Icon n="plus" size={13}/>Convert to task card</div>
+            <div onClick={()=>{setMenu(false);onToggle();}} style={item} onMouseEnter={x=>x.currentTarget.style.background="rgba(var(--ovc),.07)"} onMouseLeave={x=>x.currentTarget.style.background="transparent"}><Icon n="check" size={13}/>{e.done?"Mark open":"Mark done"}</div>
+            <div onClick={()=>{setMenu(false);onRemove();}} style={{...item,color:"#ff6b6b"}} onMouseEnter={x=>x.currentTarget.style.background="rgba(var(--ovc),.07)"} onMouseLeave={x=>x.currentTarget.style.background="transparent"}><Icon n="x" size={13}/>Delete note</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2985,9 +3105,10 @@ function hCollect(data, kinds) {
     (data[KINDS[k].coll]||[]).forEach(t=>{
       if (KINDS[k].hidden.includes(t.status) || t.status==="done" || t.status==="deliver" || t.status==="completed") return;
       const days = t.deadline ? daysUntil(t.deadline) : null;
-      const urgent = k==="tech" ? (t.urgent===1||t.status==="urgent") : isUrgent(t);
-      const follow = k==="tech" ? t.followUp===1 : isCRFollowUp(t);
-      out.push({...t,_k:k,_client:names[t.cId]||"No client",_days:days,_urgent:urgent,_follow:follow,_overdue:days!==null&&days<0,_due7:days!==null&&days>=0&&days<=7,_waiting:t.status==="client"||t.status==="awaiting",_blocked:t.status==="blocked"||!!LINK_BLOCKED[t.id],_unassigned:!(t.assignee||"").trim()});
+      const urgent = flagU(t);
+      const follow = flagF(k,t);
+      const ppl = asg(t).filter(p=>TEAM.includes(p));
+      out.push({...t,_k:k,_client:names[t.cId]||"No client",_days:days,_urgent:urgent,_follow:follow,_overdue:days!==null&&days<0,_due7:days!==null&&days>=0&&days<=7,_waiting:t.status==="client"||t.status==="awaiting",_blocked:t.status==="blocked"||!!LINK_BLOCKED[t.id],_asg:ppl,_unassigned:ppl.length===0});
     });
   });
   return out;
@@ -3003,7 +3124,7 @@ function HRow({t, onClick, right, sub}) {
     <span style={{width:3,alignSelf:"stretch",borderRadius:2,background:st.bg==="#1c1c1e"?st.text:st.bg,flexShrink:0}}/>
     <div style={{flex:1,minWidth:0}}>
       <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
-      <div style={{fontSize:11,color:T.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub||`${t._client} · ${H_LABEL[t._k]}${t.assignee?" · "+t.assignee:" · Unassigned"}`}</div>
+      <div style={{fontSize:11,color:T.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub||`${t._client} · ${H_LABEL[t._k]}${t._asg&&t._asg.length?" · "+t._asg.join(", "):" · Unassigned"}`}</div>
     </div>
     <span style={{fontSize:11,fontWeight:700,color:T.text2,whiteSpace:"nowrap"}}>{right}</span>
   </div>;
@@ -3059,8 +3180,8 @@ function HealthDash({data, goTo, upd}) {
   const [dr, setDr] = useState(null);
   const kinds = svc==="all" ? H_KINDS : [svc];
   const whoName = who==="me" ? CURRENT_USER : who==="all" ? null : who;
-  let all = hCollect(data, kinds); if (whoName) all = all.filter(t=>(t.assignee||"").trim()===whoName);
-  const roster = [...new Set([...TEAM, ...hCollect(data,H_KINDS).map(t=>(t.assignee||"").trim()).filter(Boolean)])].sort();
+  let all = hCollect(data, kinds); if (whoName) all = all.filter(t=>t._asg.includes(whoName));
+  const roster = [...TEAM].sort();
   const showSocial = svc==="all"||svc==="social";
   const soc = showSocial ? hSocial(data, all).filter(x=>!whoName || x.ts.length>0) : [];
   const socRisk = soc.filter(x=>x.g.cls==="late"||x.g.cls==="warn");
@@ -3069,8 +3190,8 @@ function HealthDash({data, goTo, upd}) {
   const overdue = all.filter(t=>t._overdue).sort((a,b)=>a._days-b._days);
   const soon = all.filter(t=>t._due7).sort((a,b)=>a._days-b._days);
   const attention = all.filter(t=>t._urgent||t._blocked||t._unassigned||t._follow).sort(hSort);
-  const reason = t => t._urgent?"Urgent":t._blocked?"Blocked":t._unassigned?"Unassigned":"Follow up";
-  const people = {}; all.forEach(t=>{ const p=(t.assignee||"").trim()||"Unassigned"; const o=people[p]=people[p]||{n:0,od:0,u:0}; o.n++; if(t._overdue)o.od++; if(t._urgent)o.u++; });
+  const reason = t => t._urgent?"Urgent":t._blocked?"Blocked":t._unassigned?"Unassigned":"Discuss";
+  const people = {}; all.forEach(t=>{ (t._asg.length?t._asg:["Unassigned"]).forEach(p=>{ const o=people[p]=people[p]||{n:0,od:0,u:0}; o.n++; if(t._overdue)o.od++; if(t._urgent)o.u++; }); });
   const ppl = Object.entries(people).sort((a,b)=>b[1].n-a[1].n); const maxP = Math.max(1,...ppl.map(([,v])=>v.n));
   const sg = {}; ((data.social&&data.social.clients)||[]).forEach(c=>{ sg[c.id]=gaugeFor(c).cls; });
   const clients = {}; all.forEach(t=>{ const key=t._k+"|"+t.cId; const o=clients[key]=clients[key]||{name:t._client,k:t._k,n:0,od:0,u:0,w:0,id:t.cId,g:t._k==="social"?sg[t.cId]:null}; o.n++; if(t._overdue)o.od++; if(t._urgent)o.u++; if(t._blocked||t._waiting)o.w++; });
@@ -3119,7 +3240,7 @@ function HealthDash({data, goTo, upd}) {
           {more("Needs attention",attention)}
         </HPanel>
         <HPanel span={wide?2:0} title="Workload by person" note="click a person">
-          {ppl.length===0 ? empty("No tasks.") : ppl.map(([p,v])=><div key={p} onClick={()=>open(p,scope,all.filter(t=>((t.assignee||"").trim()||"Unassigned")===p))} style={{marginBottom:9,cursor:"pointer"}}>
+          {ppl.length===0 ? empty("No tasks.") : ppl.map(([p,v])=><div key={p} onClick={()=>open(p,scope,all.filter(t=>(t._asg.length?t._asg:["Unassigned"]).includes(p)))} style={{marginBottom:9,cursor:"pointer"}}>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,color:T.text}}><span style={{display:"flex",alignItems:"center",gap:7}}>{p!=="Unassigned"&&<Avatar name={p} size={16}/>}{p}</span><span style={{color:T.text2,fontVariantNumeric:"tabular-nums"}}>{v.n}{v.od>0&&<span style={{color:"var(--bad)"}}> · {v.od} overdue</span>}{v.u>0&&<span style={{color:"var(--bad)"}}> · {v.u} urgent</span>}</span></div>
             <div style={{height:5,borderRadius:3,background:T.surface2,marginTop:4,display:"flex",overflow:"hidden"}}><div style={{width:((v.n-v.od)/maxP*100)+"%",background:p==="Unassigned"?"var(--warn)":"#7b68ee"}}/><div style={{width:(v.od/maxP*100)+"%",background:"var(--bad)"}}/></div></div>)}
         </HPanel>
@@ -3162,8 +3283,8 @@ function TeamPage({kind, data, goTo}) {
   const [pick0, setPick] = useState(null);
   const pick = pick0 || (who==="all"?null:(who==="me"?CURRENT_USER:who));
   const all = hCollect(data,[kind]);
-  const names = [...new Set([...TEAM, ...all.map(t=>(t.assignee||"").trim()).filter(Boolean)])];
-  const per = names.map(p=>{ const ts=all.filter(t=>(t.assignee||"").trim()===p).sort(hSort); return {p,ts,od:ts.filter(t=>t._overdue).length,u:ts.filter(t=>t._urgent).length,rv:ts.filter(t=>t.status==="review").length,w:ts.filter(t=>t._waiting).length,b:ts.filter(t=>t._blocked).length,next:ts.filter(t=>t._days!==null&&t._days>=0).sort((a,b)=>a._days-b._days)[0]}; }).filter(x=>x.ts.length>0||TEAM.includes(x.p));
+  const names = [...TEAM];
+  const per = names.map(p=>{ const ts=all.filter(t=>t._asg.includes(p)).sort(hSort); return {p,ts,od:ts.filter(t=>t._overdue).length,u:ts.filter(t=>t._urgent).length,rv:ts.filter(t=>t.status==="review").length,w:ts.filter(t=>t._waiting).length,b:ts.filter(t=>t._blocked).length,next:ts.filter(t=>t._days!==null&&t._days>=0).sort((a,b)=>a._days-b._days)[0]}; }).filter(x=>x.ts.length>0||TEAM.includes(x.p));
   const un = all.filter(t=>t._unassigned).sort(hSort);
   const max = Math.max(1,...per.map(x=>x.ts.length));
   const sel = pick==="__un" ? {p:"Unassigned",ts:un} : per.find(x=>x.p===pick);
@@ -3474,6 +3595,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [superComms, setSuperComms] = useState(null);
+  const [mlEdit, setMlEdit] = useState(null);
   const [techDataOpen, setTechDataOpen] = useState(null);
   const [backupModal, setBackupModal] = useState(null);
   const [cmImport, setCmImport] = useState(false);
@@ -3522,7 +3644,9 @@ function App() {
   const visibleOf = kind => listOf(kind).filter(i=>!KINDS[kind].hidden.includes(i.status));
   const isBoard = clientTab==="creative"||clientTab==="tech"||clientTab==="ppc"||(clientTab==="social"&&socialSub==="board");
   const sortedClients = [...data.clients].sort((a,b)=>{const o={"1":0,"2":1,"3":2,"4":3,"internal":4,"churned":5};return (o[a.tier]||6)-(o[b.tier]||6)||a.priority-b.priority;});
+  applyTeam(data.team);
   const people = TEAM;
+  const addPerson = name => { const n=(name||"").trim(); if(!n) return; upd(d=>{ if(!TEAM_BASE.concat(d.team||[]).some(p=>p.toLowerCase()===n.toLowerCase())) d.team=[...(d.team||[]),n]; }); applyTeam([...(data.team||[]),n]); };
   const backupFilename = `Digi-Unified-Backup_${today()}_v${(data.backupSeq||0)+1}.json`;
   const social = data.social;
   const {status:syncStatus, retry:retrySync, importSnapshot} = useCloudSync(data, setData);
@@ -3539,14 +3663,15 @@ function App() {
   const linkTask = (fk, fid, rel, tk, tid) => upd(d=>{ const put=(k1,id1,k2,id2,r)=>{ const t=(d[KINDS[k1].coll]||[]).find(x=>x.id===id1); if(!t) return; t.links=t.links||[]; if(!t.links.some(l=>l.id===id2&&l.k===k2&&l.rel===r)) t.links.push({k:k2,id:id2,rel:r}); }; if(rel==="blocks") put(tk,tid,fk,fid,"waiting_on"); else put(fk,fid,tk,tid,rel); });
   const unlinkTask = (from, l) => upd(d=>{ const t=(d[KINDS[from.kind].coll]||[]).find(x=>x.id===from.id); if(t) t.links=(t.links||[]).filter(x=>!(x.id===l.id&&x.k===l.k&&x.rel===l.rel)); });
   // Flags
-  const crUrgent = visibleOf("creative").filter(isUrgent);
-  const crFollow = visibleOf("creative").filter(isCRFollowUp);
-  const tcUrgent = listOf("tech").filter(t=>t.urgent===1||t.status==="urgent");
-  const tcFollow = listOf("tech").filter(t=>t.followUp===1);
-  const ppcUrgent = visibleOf("ppc").filter(isUrgent);
-  const ppcFollow = visibleOf("ppc").filter(isCRFollowUp);
-  const smUrgent = visibleOf("social").filter(isUrgent);
-  const smFollow = visibleOf("social").filter(isCRFollowUp);
+  const live = k => listOf(k).filter(t=>!isDoneTask(k,t));
+  const crUrgent = live("creative").filter(flagU);
+  const crFollow = live("creative").filter(t=>flagF("creative",t));
+  const tcUrgent = live("tech").filter(flagU);
+  const tcFollow = live("tech").filter(t=>flagF("tech",t));
+  const ppcUrgent = live("ppc").filter(flagU);
+  const ppcFollow = live("ppc").filter(t=>flagF("ppc",t));
+  const smUrgent = live("social").filter(flagU);
+  const smFollow = live("social").filter(t=>flagF("social",t));
   const socialLive = social.clients.filter(c=>socialStatusKey(c.status)!=="archive");
   const socialPriority = socialLive.filter(c=>{const g=gaugeFor(c);return g.cls==="warn"||g.cls==="late";}).sort((a,b)=>{const da=gaugeFor(a).days,db=gaugeFor(b).days;if(da===null)return 1;if(db===null)return -1;return da-db;});
   const socialErrors = socialLive.filter(c=>(c.errorLog||[]).some(e=>e.resolved==="N"));
@@ -3556,13 +3681,15 @@ function App() {
   const changeStatus = (kind, id, next) => upd(d=>{
     const coll = KINDS[kind].coll;
     const arr = d[coll]||[]; const t = arr.find(x=>x.id===id); if(!t) return;
-    if (next==="completed"||next==="archive") {
+    if (next==="completed"||next==="archive"||next==="done"||next==="deliver") {
       t.archivedAt = today(); d.archive = d.archive||[];
-      d.archive.unshift({...t,kind,status:next==="completed"?"completed":"archived"});
+      d.archive.unshift({...t,kind,status:next==="archive"?"archived":"completed"});
       arr.forEach(x=>{ if(x.parentId===id) x.parentId=null; });
       d[coll] = arr.filter(x=>x.id!==id);
     } else {
       t.status = next;
+      if (next==="urgent" && t.urgent===-1) t.urgent=0;
+      if (["review","client","revision"].includes(next) && t.followUp===-1) t.followUp=0;
       if (kind==="tech") { if(next==="review"||next==="awaiting") t.followUp=1; if(next==="urgent") t.urgent=1; }
     }
   });
@@ -3590,7 +3717,7 @@ function App() {
     upd(d=>{
       const coll = KINDS[kind].coll;
       if(!d[coll]) d[coll]=[];
-      const base = {id,cId:f.cId||activeId,title:f.title.trim(),status:f.status||"todo",assignee:f.assignee||"",notes:f.notes||"",deadline:f.deadline||"",start:f.start||"",priority:f.priority||"normal",tags:f.tags||[],link:f.link||"",custom:f.custom||[],parentId:f.parentId||null,comments:[],createdAt:Date.now()};
+      const base = {id,cId:f.cId||activeId,title:f.title.trim(),status:f.status||"todo",assignee:f.assignee||"",assignees:Array.isArray(f.assignees)?f.assignees:asg(f),watchers:f.watchers||[],notes:f.notes||"",deadline:f.deadline||"",start:f.start||"",priority:f.priority||"normal",tags:f.tags||[],link:f.link||"",custom:f.custom||[],parentId:f.parentId||null,comments:[],createdAt:Date.now()};
       if (kind==="tech") Object.assign(base,{section:(f.tags||[]).includes("AI App Build")?"appbuild":((kind===kind0 && f.section)||"sites"),followUp:0,urgent:(f.status==="urgent")?1:0});
       else base.type = (kind===kind0 && f.type) ? f.type : KINDS[kind].defType;
       d[coll].push(base);
@@ -3605,7 +3732,7 @@ function App() {
     arr.forEach(x=>{ if(x.parentId===id) x.parentId=null; });
     d[coll] = arr.filter(x=>x.id!==id);
   });
-  const toggleFlag = (kind,id,f) => upd(d=>{const t=(d[KINDS[kind].coll]||[]).find(t=>t.id===id);if(t)t[f]=t[f]?0:1;});
+  const toggleFlag = (kind,id,f) => upd(d=>{const t=(d[KINDS[kind].coll]||[]).find(t=>t.id===id); if(!t) return; if(f==="urgent"){ t.urgent = flagNext(flagU(t), t.status==="urgent"); } else { t.followUp = flagNext(flagF(kind,t), kind!=="tech" && isCRFollowUp(t)); } });
   const restoreEntry = (src, id) => upd(d=>{
     const a = (d[src]||[]).find(x=>x.id===id); if(!a) return;
     const k = kindOfEntry(a);
@@ -3692,6 +3819,15 @@ function App() {
       d.clients.filter(c=>c.tier===tier).forEach((c,i)=>{c.priority=i+1;});
     });
     setDragClientId(null);setDragOverClientId(null);
+  };
+  const convertExtra = e => {
+    const lines = (e.text||"").trim().split(/\n+/); const first = lines[0]||"";
+    const title = first.length>140 ? first.slice(0,137)+"..." : first;
+    const notes = lines.length>1 ? lines.slice(1).join("\n") : (first.length>140 ? first : "");
+    const kind = e.tab||clientTab;
+    if (kind==="social") setSocialSub("board");
+    const cid = e.cId || (kind==="social"?socialActiveId:activeId);
+    setCardCtx({kind,isNew:true,preset:{title,notes,fromExtra:e.id,...(cid?{cId:cid}:{})}});
   };
   const addExtra = () => {
     const txt = extraText.trim(); if(!txt) return;
@@ -3786,11 +3922,11 @@ function App() {
         </SidebarGroup>
         <SidebarGroup label="SM Urgent tasks" color="#ff3b30" count={smUrgent.length}>
           {smUrgent.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {orderedFlags("social:urgent",smUrgent).map(i=>flagItem("social:urgent",smUrgent,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>))}
+          {orderedFlags("social:urgent",smUrgent).map(i=>flagItem("social:urgent",smUrgent,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>{goTo("social",i);setCardCtx({kind:"social",id:i.id});}}/>))}
         </SidebarGroup>
-        <SidebarGroup label="SM Follow-up tasks" color="#ff9f0a" count={smFollow.length}>
+        <SidebarGroup label="SM Follow-up / Discuss" color="#ff9f0a" count={smFollow.length}>
           {smFollow.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {orderedFlags("social:follow",smFollow).map(i=>flagItem("social:follow",smFollow,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>goTo("social",i)}/>))}
+          {orderedFlags("social:follow",smFollow).map(i=>flagItem("social:follow",smFollow,i,<SidebarItem item={i} kind="social" clients={social.clients} onClick={()=>{goTo("social",i);setCardCtx({kind:"social",id:i.id});}}/>))}
         </SidebarGroup>
       </>
     );
@@ -3802,11 +3938,11 @@ function App() {
       <>
         <SidebarGroup label={`${pre} Urgent`} color="#ff3b30" count={urg.length}>
           {urg.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {orderedFlags(k+":urgent",urg).map(i=>flagItem(k+":urgent",urg,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>))}
+          {orderedFlags(k+":urgent",urg).map(i=>flagItem(k+":urgent",urg,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>{goTo(k,i);setCardCtx({kind:k,id:i.id});}}/>))}
         </SidebarGroup>
-        <SidebarGroup label={`${pre} Follow-up`} color="#ff9f0a" count={fol.length}>
+        <SidebarGroup label={`${pre} Follow-up / Discuss`} color="#ff9f0a" count={fol.length}>
           {fol.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px"}}>Clear</div>}
-          {orderedFlags(k+":follow",fol).map(i=>flagItem(k+":follow",fol,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>goTo(k,i)}/>))}
+          {orderedFlags(k+":follow",fol).map(i=>flagItem(k+":follow",fol,i,<SidebarItem item={i} kind={k} clients={data.clients} onClick={()=>{goTo(k,i);setCardCtx({kind:k,id:i.id});}}/>))}
         </SidebarGroup>
       </>
     );
@@ -3861,7 +3997,7 @@ function App() {
       </div>
       <div style={{margin:"0 10px",flex:1,minHeight:0,display:"flex",flexDirection:"column",background:T.bg,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:6,padding:"10px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-          <button onClick={()=>setLeftPanel("flags")} style={tabBtn(leftPanel==="flags")}>Flags</button>
+          <button onClick={()=>setLeftPanel("flags")} style={tabBtn(leftPanel==="flags")}>Meeting Flags</button>
           <button onClick={()=>setLeftPanel("clients")} style={tabBtn(leftPanel==="clients")}>Clients</button>
           {leftPanel==="clients" && <Btn size="sm" style={{marginLeft:"auto"}} onClick={()=>clientTab==="social"?addSocialClient():openClient(null)}><Icon n="plus" size={11}/>Add</Btn>}
         </div>
@@ -3869,13 +4005,14 @@ function App() {
           {leftPanel==="flags" && (
             <>
               {renderFlags()}
-              <SidebarGroup label="Additional Items" color={T.text2} count={myExtras.length}>
+              <SidebarGroup label="Meeting Quick Notes" color={T.text2} count={myExtras.length}>
                 {myExtras.length===0 && <div style={{fontSize:11,color:T.text4,padding:"4px 8px",lineHeight:1.5}}>Nothing yet. Type in the box below and press Enter.</div>}
                 {myExtras.map(e=>{
                   const cl = e.cId ? data.clients.find(c=>c.id===e.cId) : null;
                   return <ExtraItem key={e.id} e={e} client={cl}
                     onToggle={()=>upd(d=>{const x=(d.extras||[]).find(z=>z.id===e.id); if(x) x.done=!x.done;})}
                     onRemove={()=>upd(d=>{d.extras=(d.extras||[]).filter(z=>z.id!==e.id);})}
+                    onConvert={()=>convertExtra(e)}
                     onOpen={()=>{ if(cl){setActiveId(cl.id);if(clientTab==="tech" && techSub!=="overview") setTechSub("board");} }}/>;
                 })}
               </SidebarGroup>
@@ -3887,12 +4024,12 @@ function App() {
           <div style={{flexShrink:0,borderTop:`1px solid ${T.border}`,padding:"10px"}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
               <Icon n="note" size={12} style={{color:T.text3}}/>
-              <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:T.text3,textTransform:"uppercase"}}>Quick note</span>
+              <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",color:T.text3,textTransform:"uppercase"}}>Meeting Quick Notes</span>
               <span style={{fontSize:9,color:T.text4,marginLeft:"auto"}}>Enter to add</span>
             </div>
             <textarea value={extraText} onChange={e=>setExtraText(e.target.value)}
               onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();addExtra();} }}
-              placeholder="Add to Additional Items…"
+              placeholder="Add a meeting quick note…"
               style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 10px",color:T.text,fontSize:12,fontFamily:"inherit",resize:"none",height:58,outline:"none",lineHeight:1.5}}
               onFocus={e=>e.target.style.borderColor=T.border2} onBlur={e=>e.target.style.borderColor=T.border}/>
           </div>
@@ -4049,6 +4186,9 @@ function App() {
             {openDriveUrl ? <HBtn href={openDriveUrl}>G.Drive</HBtn> : <HBtn onClick={()=>client&&setSuperComms("resources")}>G.Drive</HBtn>}
             {scBoardUrl ? <HBtn href={scBoardUrl}>S.Comms Board</HBtn> : <HBtn onClick={()=>client&&setSuperComms("resources")}>S.Comms Board</HBtn>}
             {scClientUrl ? <HBtn href={scClientUrl}>S.Comms client</HBtn> : <HBtn onClick={()=>client&&setSuperComms("resources")}>S.Comms client</HBtn>}
+            {(()=>{ const mk=normName(hc.name), mu=(data.meetingLinks||{})[mk]||""; return mu
+              ? <span style={{display:"inline-flex",alignItems:"center",gap:2}}><HBtn href={safeUrl(mu)}>S.Comms Meetings</HBtn><button title="Edit the meetings link" onClick={()=>setMlEdit({key:mk,name:hc.name,val:mu})} style={{background:"none",border:"none",cursor:"pointer",color:T.text3,padding:3,display:"flex"}}><Icon n="edit" size={12}/></button></span>
+              : <HBtn onClick={()=>setMlEdit({key:mk,name:hc.name,val:""})}>S.Comms Meetings</HBtn>; })()}
             <Btn variant="primary" onClick={()=>openNew(clientTab)}><Icon n="plus" size={13}/>Task</Btn>
           </div>
         </div>
@@ -4355,10 +4495,10 @@ function App() {
     <>
       {cardCtx && (()=>{
         const kind = cardCtx.kind;
-        const common = {kind,onAddClient:name=>addClientQuick(kind,name),clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
+        const common = {kind,onAddPerson:addPerson,onToggleFlag:f=>toggleFlag(kind,cardCtx.id,f),onAddClient:name=>addClientQuick(kind,name),clients:isSocialBoard?socialBoardClients:sortedClients,people,activeId:boardActiveId,onClose:()=>setCardCtx(null),getParents:getParents(kind)};
         if (cardCtx.isNew) {
-          return <NewTaskDialog key="new" kind={kind} preset={cardCtx.preset} clients={isSocialBoard?socialBoardClients:sortedClients} people={people} activeId={boardActiveId} getParents={getParents(kind)} onAddClient={name=>addClientQuick(kind,name)} onClose={()=>setCardCtx(null)}
-            onCreate={(f,mode)=>{ const id=createTask(kind,f); if(!id) return; const k=createdKind.current||kind; if(mode==="open") setCardCtx({kind:k,id}); else if(mode==="close") setCardCtx(null); }}/>;
+          return <NewTaskDialog key="new" kind={kind} preset={cardCtx.preset} clients={isSocialBoard?socialBoardClients:sortedClients} people={people} activeId={boardActiveId} getParents={getParents(kind)} onAddClient={name=>addClientQuick(kind,name)} onAddPerson={addPerson} onClose={()=>setCardCtx(null)}
+            onCreate={(f,mode)=>{ const id=createTask(kind,f); if(!id) return; if(f.fromExtra) upd(d=>{ d.extras=(d.extras||[]).filter(z=>z.id!==f.fromExtra); }); const k=createdKind.current||kind; if(mode==="open") setCardCtx({kind:k,id}); else if(mode==="close") setCardCtx(null); }}/>;
         }
         const task = listOf(kind).find(x=>x.id===cardCtx.id);
         if (!task) return null;
@@ -4375,6 +4515,12 @@ function App() {
           onAddComment={(id,text)=>addComment(kind,id,text)}
           onDeleteComment={(id,cid)=>deleteComment(kind,id,cid)}/>;
       })()}
+      {mlEdit && (
+        <Modal title={"S.Comms Meetings link: "+mlEdit.name} onClose={()=>setMlEdit(null)}
+          footer={<>{mlEdit.val && (data.meetingLinks||{})[mlEdit.key] && <Btn onClick={()=>{ upd(d=>{ d.meetingLinks={...(d.meetingLinks||{}),[mlEdit.key]:""}; }); setMlEdit(null); }}>Remove</Btn>}<Btn onClick={()=>setMlEdit(null)}>Cancel</Btn><Btn variant="primary" onClick={()=>{ const u=safeUrl(mlEdit.val); upd(d=>{ d.meetingLinks={...(d.meetingLinks||{}),[mlEdit.key]:u}; }); setMlEdit(null); }}>Save</Btn></>}>
+          <Field label="Link to the client's meetings channel or board in S.Comms"><FIn value={mlEdit.val} onChange={v=>setMlEdit(m=>({...m,val:v}))} placeholder="https://"/></Field>
+        </Modal>
+      )}
       {modal==="client" && (
         <Modal title={form._id?"Edit Client":"Add Client"} onClose={()=>setModal(null)}
           footer={<><Btn onClick={()=>setModal(null)}>Cancel</Btn><Btn variant="primary" onClick={saveClient}>Save</Btn></>}>
