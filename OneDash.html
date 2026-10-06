@@ -2979,11 +2979,11 @@ function ClientSpecSheet({data, upd, openClient, addSite, goRegister}) {
 }
 
 // ── User Lists: a person's personal priorities (tagged tasks and manual entries), their assigned tasks, and a manual list ──
-const ML_WHO_KEY = "od_list_who";
-const ML_SORT_KEY = "od_list_sort";
-const ML_SORTS = [["due","Due date"],["status","Status"],["client","Client"],["service","Service"],["title","Task name"]];
-const ML_COLS = "20px minmax(0,1fr) 92px 120px 112px";
-function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, onToggleManual, onPromote, onRemove, onReorder, onTogglePriority, onConvert, onClose, onClearDone}) {
+const MLC_WHO_KEY = "od_list_who";
+const MLC_SORT_KEY = "od_list_sort";
+const MLC_SORTS = [["due","Due date"],["status","Status"],["client","Client"],["service","Service"],["title","Task name"]];
+const MLC_COLS = "20px minmax(0,1fr) 92px 120px 112px";
+function MyListClassic({layoutToggle, all, archive, people, who, setWho, lists, onOpen, onAddManual, onToggleManual, onPromote, onRemove, onReorder, onTogglePriority, onConvert, onClose, onClearDone}) {
   const [text, setText] = useState("");
   const [tab, setTab] = useState("assigned");
   const [q, setQ] = useState("");
@@ -2996,8 +2996,8 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
   const [drag, setDrag] = useState(null);      // {id, sec}
   const [over, setOver] = useState(null);      // {id, pos, sec} or {sec, end:true}
   const [sortOpen, setSortOpen] = useState(false);
-  const [sort, setSortS] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(ML_SORT_KEY)||"null")||{k:"due",d:1}; }catch(e){ return {k:"due",d:1}; } });
-  const setSort = s => { setSortS(s); try{ localStorage.setItem(ML_SORT_KEY,JSON.stringify(s)); }catch(e){} };
+  const [sort, setSortS] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(MLC_SORT_KEY)||"null")||{k:"due",d:1}; }catch(e){ return {k:"due",d:1}; } });
+  const setSort = s => { setSortS(s); try{ localStorage.setItem(MLC_SORT_KEY,JSON.stringify(s)); }catch(e){} };
   useEffect(()=>{ if(!sortOpen) return; const h=()=>setSortOpen(false); const t=setTimeout(()=>document.addEventListener("mousedown",h),0); return ()=>{ clearTimeout(t); document.removeEventListener("mousedown",h); }; },[sortOpen]);
 
   const items = lists[who]||[];
@@ -3054,7 +3054,7 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
     onDrop:e=>{ if(!drag) return; e.preventDefault(); dropEnd(sec); setDrag(null); setOver(null); }
   });
   const secStyle = sec => ({borderRadius:14,padding:6,margin:-6,outline:over&&over.end&&over.sec===sec?"2px dashed var(--info)":"2px dashed transparent",transition:"outline-color .12s"});
-  const rowBox = (id, extra) => ({display:"grid",gridTemplateColumns:ML_COLS,alignItems:"center",columnGap:10,padding:"10px 12px",background:T.surface,borderRadius:12,marginBottom:6,opacity:drag&&drag.id===id?.4:1,border:`1px solid ${T.border}`,borderTop:over&&over.id===id&&over.pos==="before"?"2px solid var(--info)":`1px solid ${T.border}`,borderBottom:over&&over.id===id&&over.pos==="after"?"2px solid var(--info)":`1px solid ${T.border}`,...extra});
+  const rowBox = (id, extra) => ({display:"grid",gridTemplateColumns:MLC_COLS,alignItems:"center",columnGap:10,padding:"10px 12px",background:T.surface,borderRadius:12,marginBottom:6,opacity:drag&&drag.id===id?.4:1,border:`1px solid ${T.border}`,borderTop:over&&over.id===id&&over.pos==="before"?"2px solid var(--info)":`1px solid ${T.border}`,borderBottom:over&&over.id===id&&over.pos==="after"?"2px solid var(--info)":`1px solid ${T.border}`,...extra});
   const iconBtn = {background:"none",border:"none",cursor:"pointer",color:T.text3,padding:4,display:"inline-flex",borderRadius:6};
   const meta = x => <div style={{fontSize:11,color:T.text4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{x.client} · {x.label}{x.task.deadline?<span style={{color:isOverdue(x.task.deadline)?"#ff6b6b":T.text4}}> · due {fmtDate(x.task.deadline)}</span>:null}</div>;
   const flagDot = x => flagU(x.task) ? <Icon n="flag" size={11} style={{color:"#ff3b30",flexShrink:0}}/> : flagF(x.kind,x.task) ? <Icon n="flag" size={11} style={{color:"#ff9f0a",flexShrink:0}}/> : null;
@@ -3095,7 +3095,7 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
           <select aria-label="Whose list" value={who} onChange={e=>setWho(e.target.value)} style={{background:T.bg,color:T.text,border:`1px solid ${T.border}`,borderRadius:999,padding:"6px 14px",fontSize:12.5,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
             {people.map(p=><option key={p} value={p}>{p===CURRENT_USER?p+" (me)":p}</option>)}
           </select>
-          <Btn onClick={onClose}>Back to dashboards</Btn>
+          {layoutToggle}<Btn onClick={onClose}>Back to dashboards</Btn>
         </div>
       </div>
       <div style={{flex:1,minHeight:0,overflowY:"auto"}} onDragOver={e=>{ if(drag) e.preventDefault(); }}>
@@ -3135,14 +3135,14 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
           {show("assigned") && <div style={{marginTop:view==="all"?34:0}}>
             {head(isMe?"Assigned to me":"Assigned to "+who, mine.length+" open", <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{seg("assigned","Assigned",mine.length)}{seg("watching","Watching",watching.length)}<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter" style={{width:150,background:T.surface,border:`1px solid ${T.border}`,borderRadius:999,padding:"4px 12px",color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",marginLeft:4}}/></span>, "assigned")}
             {!isCol("assigned") && <>
-            <div style={{display:"grid",gridTemplateColumns:ML_COLS,columnGap:10,alignItems:"center",padding:"0 12px 6px",fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4}}>
+            <div style={{display:"grid",gridTemplateColumns:MLC_COLS,columnGap:10,alignItems:"center",padding:"0 12px 6px",fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4}}>
               <span/><span>Task</span><span/>
               <span style={{position:"relative"}}>
-                <button onClick={e=>{e.stopPropagation();setSortOpen(o=>!o);}} title="Sort the assigned tasks" style={{display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap",background:sortOpen?"rgba(var(--ovc),.08)":"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"2px 9px",fontSize:10.5,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.text2,cursor:"pointer",fontFamily:"inherit"}}>Status<span style={{fontWeight:500,letterSpacing:0,textTransform:"none",color:T.text4}}>· {(ML_SORTS.find(s=>s[0]===sort.k)||[])[1]}</span><Icon n="chevron" size={9}/></button>
+                <button onClick={e=>{e.stopPropagation();setSortOpen(o=>!o);}} title="Sort the assigned tasks" style={{display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap",background:sortOpen?"rgba(var(--ovc),.08)":"transparent",border:`1px solid ${T.border}`,borderRadius:999,padding:"2px 9px",fontSize:10.5,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.text2,cursor:"pointer",fontFamily:"inherit"}}>Status<span style={{fontWeight:500,letterSpacing:0,textTransform:"none",color:T.text4}}>· {(MLC_SORTS.find(s=>s[0]===sort.k)||[])[1]}</span><Icon n="chevron" size={9}/></button>
                 {sortOpen && (
                   <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:20,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:12,padding:5,width:190,boxShadow:"0 12px 36px rgba(0,0,0,.55)",textTransform:"none",letterSpacing:0,fontWeight:500}}>
                     <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4,padding:"4px 8px"}}>Sort by</div>
-                    {ML_SORTS.map(([k,l])=>(
+                    {MLC_SORTS.map(([k,l])=>(
                       <div key={k} onClick={()=>{ setSort({k,d:sort.k===k?-sort.d:1}); setSortOpen(false); }} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:12.5,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                         <span style={{width:12,color:"#30d158",fontWeight:800}}>{sort.k===k?"✓":""}</span>{l}{sort.k===k && <span style={{marginLeft:"auto",color:T.text4,fontSize:11}}>{sort.d===1?"\u2191":"\u2193"}</span>}
                       </div>))}
@@ -3153,7 +3153,7 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
             </div>
             {pool.length===0 && <div style={{fontSize:12.5,color:T.text4,padding:"6px 2px"}}>{(tab==="assigned"?mine:watching).length===0?"Nothing here.":"Everything here is already in Personal priorities, or nothing matches the filter."}</div>}
             {shown.map(x=>{ const st=statusOf(x.kind,x.task.status); return (
-              <div key={x.kind+x.task.id} className="cm" onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"grid",gridTemplateColumns:ML_COLS,alignItems:"center",columnGap:10,padding:"9px 12px",border:`1px solid ${T.border}`,borderRadius:12,marginBottom:6,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.surface} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div key={x.kind+x.task.id} className="cm" onClick={()=>onOpen(x.kind,x.task.id)} style={{display:"grid",gridTemplateColumns:MLC_COLS,alignItems:"center",columnGap:10,padding:"9px 12px",border:`1px solid ${T.border}`,borderRadius:12,marginBottom:6,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.surface} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 {dot(st)}
                 <div style={{minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.text}}>{flagDot(x)}<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</span></div>
@@ -3179,8 +3179,8 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
           </div>}
 
           {(show("work")||show("recents")) && <div style={{display:"grid",gridTemplateColumns:view==="all"?"repeat(auto-fit,minmax(380px,1fr))":"1fr",gap:16,marginTop:view==="all"?34:0,alignItems:"start"}}>
-            {show("work") && <MLWork who={who} all={all} archive={archive} onOpen={onOpen}/>}
-            {show("recents") && <MLRecents all={all} onOpen={onOpen}/>}
+            {show("work") && <MLWorkC who={who} all={all} archive={archive} onOpen={onOpen}/>}
+            {show("recents") && <MLRecentsC all={all} onOpen={onOpen}/>}
           </div>}
         </div>
       </div>
@@ -3190,7 +3190,7 @@ function MyList({all, archive, people, who, setWho, lists, onOpen, onAddManual, 
 
 
 // ── My work: to do / done / watching, grouped by due date (layout proof of concept) ──
-function MLWork({who, all, archive, onOpen}) {
+function MLWorkC({who, all, archive, onOpen}) {
   const [tab, setTab] = useState("todo");
   const [shut, setShut] = useState({});
   const cardBox = {background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,padding:"16px 16px 12px",minWidth:0};
@@ -3239,7 +3239,7 @@ function MLWork({who, all, archive, onOpen}) {
 }
 
 // ── Recents: tasks opened on this device ──
-function MLRecents({all, onOpen}) {
+function MLRecentsC({all, onOpen}) {
   const rec = (()=>{ try{ return JSON.parse(localStorage.getItem("od_recents")||"[]"); }catch(e){ return []; } })()
     .map(r=>({r, x:all.find(y=>y.kind===r.k && y.task.id===r.id)})).filter(o=>o.x).slice(0,10);
   return (
@@ -3255,6 +3255,465 @@ function MLRecents({all, onOpen}) {
         </div>); })}
     </div>
   );
+}
+
+
+// ── User Lists: proof-of-concept layout modelled on the Supercomms "My Tasks" home (cards, group headers, aligned columns) ──
+const ML_SORT_KEY = "od_list_sort";
+const ML_SORTS = [["due","Due date"],["priority","Priority"],["status","Status"],["client","Client"],["service","Service"],["title","Task name"]];
+const ML_GROUPS = [["status","Status"],["priority","Priority"],["due","Due date"],["none","None"]];
+const ML_CARDS = [
+  ["prio","Personal priorities","Your most important tasks, in the order you ranked them."],
+  ["assigned","Assigned to me","Every task assigned to you, grouped the way you like."],
+  ["manual","Manual list","Your own notes and reminders."],
+  ["work","My work","Your tasks by when they are due."],
+  ["recents","Recents","Tasks you opened recently on this device."]
+];
+const ML_BK = [["overdue","Overdue","#C23B2E"],["today","Today","#1E8A4C"],["week","Next 7 days","#2F5FE0"],["later","Later","#6E6E73"],["none","No due date","#6E6E73"]];
+const ML_STAT = {urgent:0,review:1,progress:2,revision:3,client:4,awaiting:4,todo:5,blocked:6};
+const ML_FRAC = {todo:0,progress:.25,urgent:.25,revision:.5,review:.75,client:.75,awaiting:.75,blocked:0,done:1,completed:1,deliver:1};
+const ML_PORD = {urgent:0,high:1,normal:2,low:3};
+const mlGet = (k,d) => { try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v); }catch(e){ return d; } };
+const mlSet = (k,v) => { try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+function useML(k,d) { const [v,s]=useState(()=>mlGet(k,d)); const set=n=>s(prev=>{ const x=typeof n==="function"?n(prev):n; mlSet(k,x); return x; }); return [v,set]; }
+const mlCol = st => st.bg==="#1c1c1e"?st.text:st.bg;
+
+function PieIcon({color,frac,size=14}) {
+  const f=Math.max(0,Math.min(1,frac||0)); const a=f*2*Math.PI; const x=12+9*Math.sin(a), y=12-9*Math.cos(a);
+  return <svg width={size} height={size} viewBox="0 0 24 24" style={{flexShrink:0}}><circle cx="12" cy="12" r="9" fill={f>=1?color:"none"} stroke={color} strokeWidth="2"/>{f>0&&f<1&&<path d={`M 12 12 L 12 3 A 9 9 0 ${f>.5?1:0} 1 ${x.toFixed(3)} ${y.toFixed(3)} Z`} fill={color}/>}</svg>;
+}
+function MLI({n,size=14}) {
+  const P = {
+    filter:<path d="M3 5h18l-7 8v6l-4-2v-4z"/>,
+    sliders:<g><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></g>,
+    expand:<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>,
+    layers:<g><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></g>,
+    done:<g><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2 2 5-5"/></g>,
+    search:<g><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></g>,
+    info:<g><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6"/></g>,
+    sort:<path d="M4 7h16M4 12h11M4 17h6"/>,
+    cal:<g><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M8 3v4M16 3v4M3 10h18"/></g>
+  };
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{P[n]}</svg>;
+}
+// small dropdown that owns its open state and closes on an outside press
+function MLDrop({btn, children, align="left", width=200}) {
+  const [open,setOpen]=useState(false); const ref=useRef(null);
+  useEffect(()=>{ if(!open) return; const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h); },[open]);
+  return (
+    <span ref={ref} style={{position:"relative",display:"inline-flex"}}>
+      {btn(open,()=>setOpen(o=>!o))}
+      {open && <div style={{position:"absolute",top:"calc(100% + 6px)",[align]:0,zIndex:40,background:T.surface2,border:`1px solid ${T.border2}`,borderRadius:12,padding:5,width,boxShadow:"0 12px 36px rgba(0,0,0,.35)"}}>{children(()=>setOpen(false))}</div>}
+    </span>
+  );
+}
+const mlHead = t => <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.text4,padding:"6px 8px 4px"}}>{t}</div>;
+const MLItem = ({label,on,check,onClick,right}) => <div onClick={onClick} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:8,cursor:"pointer",fontSize:12.5,color:T.text}} onMouseEnter={e=>e.currentTarget.style.background="rgba(var(--ovc),.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{check!==undefined&&<span style={{width:12,color:"#30d158",fontWeight:800}}>{check?"✓":""}</span>}<span style={{flex:1}}>{label}</span>{right}</div>;
+const MLSwitch = ({label,on,onChange}) => <div onClick={()=>onChange(!on)} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 8px",cursor:"pointer",fontSize:12.5,color:T.text}}><span style={{flex:1}}>{label}</span><span style={{width:34,height:20,borderRadius:999,background:on?"var(--inv)":T.border2,position:"relative",transition:"background .15s",flexShrink:0}}><span style={{position:"absolute",top:2,left:on?16:2,width:16,height:16,borderRadius:"50%",background:on?"var(--inv-fg)":T.surface,transition:"left .15s"}}/></span></div>;
+const tbBtn = (on) => ({display:"inline-flex",alignItems:"center",justifyContent:"center",width:24,height:24,borderRadius:999,border:"none",cursor:"pointer",background:on?T.surface2:"transparent",color:on?T.text:T.text3,padding:0,fontFamily:"inherit"});
+const pillBtn = {display:"inline-flex",alignItems:"center",gap:5,height:22,padding:"0 10px",borderRadius:999,border:"none",background:T.surface2,color:T.text2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
+
+// ── shared cells ──
+function NameCell({x,idx,showLoc,wrap}) {
+  const st=statusOf(x.kind,x.task.status); const tags=(x.task.tags||[]).slice(0,2);
+  return (
+    <span style={{display:"flex",alignItems:"center",gap:7,minWidth:0,overflow:"hidden"}}>
+      {idx!=null && <span style={{fontSize:10,color:T.text3,width:12,textAlign:"right",flexShrink:0}}>{idx}</span>}
+      <PieIcon color={mlCol(st)} frac={ML_FRAC[x.task.status]||0}/>
+      {flagU(x.task) && <Icon n="flag" size={11} style={{color:"#ff3b30",flexShrink:0,fill:"currentColor"}}/>}
+      <span style={{fontSize:12,fontWeight:500,color:isDoneTask(x.kind,x.task)?T.text3:T.text,whiteSpace:wrap?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:isDoneTask(x.kind,x.task)?"line-through":"none"}}>{x.task.title}</span>
+      {showLoc && <span style={{fontSize:10.5,color:T.text4,whiteSpace:"nowrap",flexShrink:0}}>{x.client} · {x.label}</span>}
+      <span style={{display:"inline-flex",gap:5,minWidth:0,overflow:"hidden",flexShrink:1000}}>{tags.map(t=><TagChip key={t} tag={t} small/>)}</span>
+    </span>
+  );
+}
+const PrioCell = ({x}) => { const p=PR[prio(x.task)]||PR.normal; return <span title={p.label+" priority"} style={{display:"inline-flex",color:p.color}}><Icon n="flag" size={14} style={{fill:"currentColor"}}/></span>; };
+const DueCell = ({x}) => x.task.deadline ? <span style={{fontSize:12,color:isOverdue(x.task.deadline)?"var(--bad)":T.text2,whiteSpace:"nowrap"}}>{fmtDate(x.task.deadline)}</span> : <span title="No due date" style={{display:"inline-flex",color:T.text4}}><MLI n="cal"/></span>;
+const rowCss = (cols,extra) => ({display:"grid",gridTemplateColumns:cols,alignItems:"center",columnGap:12,minHeight:37,padding:"0 20px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",...extra});
+const ColHead = ({cols,labels,sortKey,sort,setSort}) => (
+  <div style={{display:"grid",gridTemplateColumns:cols,alignItems:"center",columnGap:12,height:28,padding:"0 20px",borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:600,letterSpacing:".02em",color:T.text2}}>
+    {labels.map((l,i)=>{ const k=sortKey&&sortKey[i]; if(!k) return <span key={i}>{l}</span>; const on=sort&&sort.k===k; return <button key={i} onClick={()=>setSort({k,d:on?-sort.d:1})} style={{display:"inline-flex",alignItems:"center",gap:3,background:"none",border:"none",padding:0,fontSize:11,fontWeight:600,letterSpacing:".02em",color:on?T.text:T.text2,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{l}{on && <span style={{display:"inline-flex",transform:sort.d===1?"rotate(0deg)":"rotate(180deg)"}}><Icon n="chevron" size={10} style={{transform:"rotate(90deg)"}}/></span>}</button>; })}
+  </div>
+);
+const GroupHead = ({g,closed,toggle}) => (
+  <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px 8px"}}>
+    <button onClick={toggle} aria-expanded={!closed} aria-label={closed?"Expand group":"Collapse group"} style={{display:"inline-flex",background:"none",border:"none",padding:0,cursor:"pointer",color:T.text3,transform:closed?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s"}}><Icon n="chevron" size={12}/></button>
+    <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10,fontWeight:800,letterSpacing:"0.04em",textTransform:"uppercase",color:"#fff",background:g.color,borderRadius:999,padding:"2px 9px",whiteSpace:"nowrap"}}>{g.frac!=null&&<PieIcon color="#fff" frac={g.frac} size={11}/>}{g.label}</span>
+    <span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.items.length}</span>
+  </div>
+);
+function mlGroups(pool, mode) {
+  if (mode==="none") return [{key:"all",label:"",color:"#6E6E73",items:pool,none:true}];
+  const m=new Map();
+  pool.forEach(x=>{ let k,label,color,frac=null;
+    if (mode==="status") { const st=statusOf(x.kind,x.task.status); k=x.task.status; label=st.label; color=mlCol(st); frac=ML_FRAC[k]||0; }
+    else if (mode==="priority") { const p=PR[prio(x.task)]||PR.normal; k=p.key; label=p.label; color=p.color; }
+    else { const d=x.task.deadline?daysUntil(x.task.deadline):null; k=d===null?"none":d<0?"overdue":d===0?"today":d<=7?"week":"later"; const b=ML_BK.find(b=>b[0]===k); label=b[1]; color=b[2]; }
+    if(!m.has(k)) m.set(k,{key:k,label,color,frac,items:[]}); m.get(k).items.push(x); });
+  const ord = mode==="status" ? k=>ML_STAT[k]??9 : mode==="priority" ? k=>ML_PORD[k]??9 : k=>ML_BK.findIndex(b=>b[0]===k);
+  return [...m.values()].sort((a,b)=>ord(a.key)-ord(b.key));
+}
+
+// ── card shell ──
+function MLShell({title, hint, sh, toolbar, children, bodyProps}) {
+  const full = !!sh.full, col = !full && sh.collapsed;
+  return (
+    <div style={{background:T.surface,border:full?"none":`1px solid ${T.border}`,borderRadius:16,boxShadow:full?"none":"0 1px 2px rgba(0,0,0,.06)",display:"flex",flexDirection:"column",height:full?"100%":(col?"auto":442),padding:20,minWidth:0,boxSizing:"border-box"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,height:24,flexShrink:0,marginBottom:col?0:8}}>
+        {!full && <button onClick={sh.onToggle} aria-expanded={!col} title={col?"Expand":"Collapse"} style={{display:"inline-flex",background:"none",border:"none",padding:0,cursor:"pointer",color:T.text3,transform:col?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s"}}><Icon n="chevron" size={12}/></button>}
+        <h2 style={{margin:0,fontSize:full?18:14,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title}</h2>
+        {hint && <span title={hint} style={{display:"inline-flex",color:T.text4,cursor:"help"}}><MLI n="info" size={13}/></span>}
+        <span style={{flex:1}}/>
+        {full ? <button onClick={sh.onClose} title="Close" aria-label="Close" style={tbBtn(false)}><Icon n="x" size={15}/></button>
+              : <button onClick={sh.onExpand} title="View in full screen" aria-label="View in full screen" style={tbBtn(false)}><MLI n="expand"/></button>}
+      </div>
+      {!col && toolbar}
+      {!col && <div {...(bodyProps||{})} style={{margin:"0 -20px -20px",flex:1,minHeight:0,overflowY:"auto",paddingBottom:12,...((bodyProps&&bodyProps.style)||{})}}>{children}</div>}
+    </div>
+  );
+}
+
+// ── Assigned to me ──
+function MLAssigned({who, all, lists, sh, onOpen, onTogglePriority}) {
+  const [group,setGroup]=useML("od_list_group","status");
+  const [sort,setSort]=useML(ML_SORT_KEY,{k:"due",d:1});
+  const [scope,setScope]=useML("od_list_scope","assigned");
+  const [closed,setClosed]=useML("od_list_closed",false);
+  const [wrap,setWrap]=useML("od_list_wrap",false);
+  const [loc,setLoc]=useML("od_list_loc",false);
+  const [q,setQ]=useState(""); const [sOpen,setSOpen]=useState(false); const [shut,setShut]=useState({});
+  const inList=new Set((lists[who]||[]).filter(i=>i.t==="task").map(i=>i.k+i.tid));
+  const ql=q.trim().toLowerCase();
+  const scopeOk = x => { const a=asg(x.task).includes(who), w=wch(x.task).includes(who); return scope==="assigned"?a:scope==="watching"?(w&&!a):(a||w); };
+  const cmp = (a,b) => {
+    const k=sort.k; let r=0;
+    if (k==="due") { const da=a.task.deadline?daysUntil(a.task.deadline):null, db=b.task.deadline?daysUntil(b.task.deadline):null; r=da===null&&db===null?0:da===null?1:db===null?-1:da-db; if(da===null||db===null) return r; }
+    else if (k==="priority") r=(ML_PORD[prio(a.task)]??9)-(ML_PORD[prio(b.task)]??9);
+    else if (k==="status") r=(ML_STAT[a.task.status]??9)-(ML_STAT[b.task.status]??9);
+    else if (k==="client") r=a.client.localeCompare(b.client);
+    else if (k==="service") r=a.label.localeCompare(b.label);
+    else r=a.task.title.localeCompare(b.task.title);
+    return r*sort.d;
+  };
+  const pool = all.filter(x=>scopeOk(x) && (closed || !isDoneTask(x.kind,x.task)) && (!ql || (x.task.title+" "+x.client+" "+x.label).toLowerCase().includes(ql))).sort(cmp);
+  const groups = mlGroups(pool, group);
+  const cols = "minmax(0,1fr) 60px 68px 28px";
+  const star = x => { const on=inList.has(x.kind+x.task.id); return <span className="mls" style={{opacity:on?1:undefined,justifySelf:"end"}}><button title={on?"Remove from Personal priorities":"Add to Personal priorities"} onClick={e=>{e.stopPropagation();onTogglePriority(who,x.kind,x.task.id);}} style={{...tbBtn(false),color:on?"var(--warn)":T.text3}}><Icon n="star" size={13} style={{fill:on?"currentColor":"none"}}/></button></span>; };
+  const toolbar = (
+    <div style={{flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,height:26,marginBottom:4}}>
+        <MLDrop btn={(o,t)=><button onClick={t} style={pillBtn}><MLI n="layers" size={12}/>{(ML_GROUPS.find(g=>g[0]===group)||[])[1]}</button>}>
+          {close=><div>{mlHead("Group by")}{ML_GROUPS.map(([k,l])=><MLItem key={k} label={l} check={group===k} onClick={()=>{setGroup(k);close();}}/>)}</div>}
+        </MLDrop>
+        <MLDrop btn={(o,t)=><button onClick={t} title="Sort" aria-label="Sort" style={tbBtn(o)}><MLI n="sort"/></button>}>
+          {close=><div>{mlHead("Sort by")}{ML_SORTS.map(([k,l])=><MLItem key={k} label={l} check={sort.k===k} right={sort.k===k?<span style={{color:T.text4,fontSize:11}}>{sort.d===1?"↑":"↓"}</span>:null} onClick={()=>{setSort({k,d:sort.k===k?-sort.d:1});close();}}/>)}<div style={{fontSize:10.5,color:T.text4,padding:"4px 8px"}}>Choose the same option again to reverse it.</div></div>}
+        </MLDrop>
+        <span style={{flex:1}}/>
+        <MLDrop align="right" btn={(o,t)=><button onClick={t} title="Quickly filter your tasks" aria-label="Quickly filter your tasks" style={tbBtn(o||scope!=="assigned")}><MLI n="filter"/></button>}>
+          {close=><div>{mlHead("Show")}{[["assigned","Assigned to me"],["watching","Watching"],["both","Both"]].map(([k,l])=><MLItem key={k} label={l} check={scope===k} onClick={()=>{setScope(k);close();}}/>)}</div>}
+        </MLDrop>
+        <button onClick={()=>setClosed(c=>!c)} title="Quickly show closed tasks" aria-label="Quickly show closed tasks" style={tbBtn(closed)}><MLI n="done"/></button>
+        <button onClick={()=>setSOpen(o=>!o)} title="Search tasks" aria-label="Search tasks" style={tbBtn(sOpen||!!q)}><MLI n="search"/></button>
+        <span style={{width:1,height:16,background:T.border,margin:"0 4px"}}/>
+        <MLDrop align="right" width={240} btn={(o,t)=><button onClick={t} title="Customise view" aria-label="Customise view" style={tbBtn(o)}><MLI n="sliders"/></button>}>
+          {()=><div>{mlHead("Customise view")}<MLSwitch label="Show client and service" on={loc} onChange={setLoc}/><MLSwitch label="Wrap text" on={wrap} onChange={setWrap}/><MLSwitch label="Show closed tasks" on={closed} onChange={setClosed}/></div>}
+        </MLDrop>
+      </div>
+      {sOpen && <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search tasks" style={{width:"100%",boxSizing:"border-box",background:T.bg,border:`1px solid ${T.border}`,borderRadius:999,padding:"5px 12px",color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",marginBottom:6}}/>}
+    </div>
+  );
+  return (
+    <MLShell title={who===CURRENT_USER?"Assigned to me":"Assigned to "+who} sh={sh} toolbar={toolbar}>
+      {groups.length===0 && <div style={{fontSize:12.5,color:T.text4,padding:"16px 20px"}}>{ql?"Nothing matches the search.":"Nothing assigned right now."}</div>}
+      {groups.map(g=>{ const isShut=!!shut[g.key]; const items=g.items; return (
+        <div key={g.key}>
+          {!g.none && <GroupHead g={g} closed={isShut} toggle={()=>setShut(s=>({...s,[g.key]:!s[g.key]}))}/>}
+          {!isShut && <>
+            <ColHead cols={cols} labels={["Name","Priority","Due date",""]} sortKey={[null,"priority","due",null]} sort={sort} setSort={setSort}/>
+            {items.map(x=>(
+              <div key={x.kind+x.task.id} className="mlr" onClick={()=>onOpen(x.kind,x.task.id)} style={rowCss(cols)}>
+                <NameCell x={x} showLoc={loc} wrap={wrap}/><PrioCell x={x}/><DueCell x={x}/>{star(x)}
+              </div>))}
+          </>}
+        </div>); })}
+    </MLShell>
+  );
+}
+
+// ── Personal priorities ──
+function MLPrio({who, all, lists, rows, doneRows, sh, dnd, onOpen, onToggleManual, onPromote, onRemove, onAddManual, onClearDone, onTogglePriority}) {
+  const [adding,setAdding]=useState(false); const [text,setText]=useState("");
+  const cols = "minmax(0,1fr) 56px 34px 68px 52px";
+  const add = () => { const v=text.trim(); if(!v) return; onAddManual(who,v,true); setText(""); };
+  const inList = new Set((lists[who]||[]).filter(i=>i.t==="task").map(i=>i.k+i.tid));
+  const ql = text.trim().toLowerCase();
+  const cands = (all||[]).filter(x=>!isDoneTask(x.kind,x.task) && !inList.has(x.kind+x.task.id) && (!ql || (x.task.title+" "+x.client+" "+x.label).toLowerCase().includes(ql)))
+    .sort((a,b)=>(asg(b.task).includes(who)?1:0)-(asg(a.task).includes(who)?1:0)).slice(0,8);
+  const all2 = [...rows,...doneRows];
+  const header = <ColHead cols={cols} labels={["# Name","Priority","Age","Due date",""]}/>;
+  const age = it => it.at ? Math.max(0,Math.floor((Date.now()-it.at)/864e5))+"d" : "-";
+  const ctl = {};
+  return (
+    <MLShell title="Personal priorities" hint="Tasks and notes you have ranked as most important. Drag to reorder." sh={sh}
+      toolbar={<div style={{flexShrink:0,display:"flex",alignItems:"center",height:22,marginBottom:2}}><span style={{fontSize:11,color:T.text4}}>{rows.length} open. Drag to reorder.</span><span style={{flex:1}}/>{doneRows.length>0 && <button onClick={()=>onClearDone(who)} style={{background:"none",border:"none",color:T.text3,fontSize:11.5,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Clear {doneRows.length} done</button>}</div>}
+      bodyProps={{...dnd.sec("prio"),style:dnd.secStyle("prio")}}>
+      {header}
+      {all2.length===0 && <div style={{padding:"14px 20px",color:T.text3,fontSize:12.5,lineHeight:1.5}}>Nothing here yet. Use the star on any task, Prioritise on a manual entry, or add a task below.</div>}
+      {all2.map((r,i)=>{
+        const it=r.it, id=it.id;
+        if (it.t==="manual") return (
+          <div key={id} className="mlr" {...dnd.row(id,"prio")} style={rowCss(cols,{...dnd.mark(id),cursor:"grab"})}>
+            <span style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+              <span style={{fontSize:10,color:T.text3,width:12,textAlign:"right",flexShrink:0}}>{i+1}</span>
+              <button onClick={()=>onToggleManual(who,id)} title={it.done?"Mark open":"Mark done"} style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${it.done?"#30d158":T.border2}`,background:it.done?"#30d158":"transparent",color:"#0e0e0e",cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>{it.done && <Icon n="check" size={9}/>}</button>
+              <span style={{fontSize:12,fontWeight:500,color:it.done?T.text3:T.text,textDecoration:it.done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.text}</span>
+            </span>
+            <span style={{color:T.text4,fontSize:12}}>-</span><span style={{fontSize:12,color:T.text2}}>{age(it)}</span><span style={{color:T.text4,fontSize:12}}>-</span>
+            <span className="mlk" style={{display:"inline-flex",justifyContent:"flex-end"}}><button title="Move back to the manual list" onClick={()=>onPromote(who,id,false)} style={tbBtn(false)}><Icon n="x" size={13}/></button><button title="Remove" onClick={()=>onRemove(who,id)} style={tbBtn(false)}><Icon n="trash" size={13}/></button></span>
+          </div>);
+        const x=r.ref;
+        return (
+          <div key={id} className="mlr" {...dnd.row(id,"prio")} onClick={()=>onOpen(x.kind,x.task.id)} style={rowCss(cols,dnd.mark(id))}>
+            <NameCell x={x} idx={i+1}/><PrioCell x={x}/><span style={{fontSize:12,color:T.text2}}>{age(it)}</span><DueCell x={x}/>
+            <span className="mlk" style={{display:"inline-flex",justifyContent:"flex-end"}}><button title="Remove from Personal priorities" onClick={e=>{e.stopPropagation();onRemove(who,id);}} style={tbBtn(false)}><Icon n="x" size={13}/></button></span>
+          </div>);
+      })}
+      {adding
+        ? <div style={{padding:"10px 20px 12px"}}>
+            <div style={{display:"flex",gap:8}}>
+              <input autoFocus value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape"){ e.stopPropagation(); setAdding(false); setText(""); } }} placeholder="Search tasks to add, or type a note and press Enter" style={{flex:1,minWidth:0,background:T.bg,border:`1px solid ${T.border}`,borderRadius:999,padding:"6px 14px",color:T.text,fontSize:12.5,fontFamily:"inherit",outline:"none"}}/>
+              <Btn size="sm" onClick={()=>{setAdding(false);setText("");}}>Done</Btn>
+            </div>
+            <div style={{marginTop:8,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+              {text.trim() && <div onClick={add} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",fontSize:12.5,color:T.text,borderBottom:`1px solid ${T.border}`}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><Icon n="plus" size={13}/>Add "{text.trim()}" as a note</div>}
+              {cands.length===0 && <div style={{padding:"8px 12px",fontSize:12,color:T.text4}}>{text.trim()?"No matching tasks.":"No tasks to suggest."}</div>}
+              {cands.map(x=>(
+                <div key={x.kind+x.task.id} onClick={()=>onTogglePriority(who,x.kind,x.task.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",cursor:"pointer",borderBottom:`1px solid ${T.border}`}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <PieIcon color={mlCol(statusOf(x.kind,x.task.status))} frac={ML_FRAC[x.task.status]||0}/>
+                  <span style={{fontSize:12.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.task.title}</span>
+                  <span style={{fontSize:10.5,color:T.text4,whiteSpace:"nowrap"}}>{x.client} · {x.label}</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600,color:T.text2}}><Icon n="star" size={11}/>Add</span>
+                </div>))}
+            </div>
+          </div>
+        : <button onClick={()=>setAdding(true)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"9px 20px",background:"none",border:"none",color:T.text2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}><Icon n="plus" size={13}/>Add task</button>}
+    </MLShell>
+  );
+}
+
+// ── Manual list ──
+function MLManual({who, rows, sh, dnd, onToggleManual, onPromote, onRemove, onConvert, onAddManual, onClearDone}) {
+  const [text,setText]=useState("");
+  const open=rows.filter(r=>!r.it.done), done=rows.filter(r=>r.it.done);
+  const add = () => { const v=text.trim(); if(!v) return; onAddManual(who,v); setText(""); };
+  const cols = "minmax(0,1fr) auto 52px";
+  return (
+    <MLShell title="Manual list" hint="Your own notes and reminders. Prioritise moves one into Personal priorities." sh={sh}
+      toolbar={<div style={{flexShrink:0,display:"flex",alignItems:"center",height:22,marginBottom:4}}><span style={{fontSize:11,color:T.text4}}>{open.length} open. Drag to reorder.</span><span style={{flex:1}}/>{done.length>0 && <button onClick={()=>onClearDone(who)} style={{background:"none",border:"none",color:T.text3,fontSize:11.5,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Clear {done.length} done</button>}</div>}
+      bodyProps={{...dnd.sec("manual"),style:dnd.secStyle("manual")}}>
+      <div style={{display:"flex",gap:8,padding:"4px 20px 10px"}}>
+        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); }} placeholder="Add to your manual list, e.g. Call Jutta about pricing terms" style={{flex:1,minWidth:0,background:T.bg,border:`1px solid ${T.border}`,borderRadius:999,padding:"7px 14px",color:T.text,fontSize:12.5,fontFamily:"inherit",outline:"none"}} onFocus={e=>e.target.style.borderColor=T.border2} onBlur={e=>e.target.style.borderColor=T.border}/>
+        <Btn variant="primary" size="sm" onClick={add} disabled={!text.trim()}>Add</Btn>
+      </div>
+      {rows.length===0 && <div style={{padding:"6px 20px",color:T.text3,fontSize:12.5}}>Nothing on your manual list.</div>}
+      {[...open,...done].map(r=>{ const it=r.it, id=it.id; return (
+        <div key={id} className="mlr" {...dnd.row(id,"manual")} style={rowCss(cols,{...dnd.mark(id),cursor:"grab"})}>
+          <span style={{display:"flex",alignItems:"center",gap:8,minWidth:0,padding:"7px 0"}}>
+            <button onClick={()=>onToggleManual(who,id)} title={it.done?"Mark open":"Mark done"} style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${it.done?"#30d158":T.border2}`,background:it.done?"#30d158":"transparent",color:"#0e0e0e",cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>{it.done && <Icon n="check" size={9}/>}</button>
+            <span style={{fontSize:12,fontWeight:500,color:it.done?T.text3:T.text,textDecoration:it.done?"line-through":"none",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{it.text}</span>
+          </span>
+          {!it.done ? <span className="mlk"><button title="Add to Personal priorities" onClick={()=>onPromote(who,id,true)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:`1px solid ${T.border2}`,color:T.text2,borderRadius:999,padding:"2px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}><Icon n="star" size={11}/>Prioritise</button></span> : <span/>}
+          <span className="mlk" style={{display:"inline-flex",justifyContent:"flex-end"}}><button title="Convert to a task card" onClick={()=>onConvert(who,it)} style={tbBtn(false)}><Icon n="plus" size={13}/></button><button title="Remove" onClick={()=>onRemove(who,id)} style={tbBtn(false)}><Icon n="x" size={13}/></button></span>
+        </div>); })}
+    </MLShell>
+  );
+}
+
+// ── My work ──
+function MLWork({who, all, archive, lists, sh, onOpen, onTogglePriority}) {
+  const [tab,setTab]=useState("todo"); const [shut,setShut]=useState({});
+  const live=all.filter(x=>!isDoneTask(x.kind,x.task));
+  const todo=live.filter(x=>asg(x.task).includes(who));
+  const watch=live.filter(x=>wch(x.task).includes(who)&&!asg(x.task).includes(who));
+  const done=(archive||[]).filter(a=>asg(a).includes(who)).sort((a,b)=>(b.archivedAt||"").localeCompare(a.archivedAt||"")).slice(0,30);
+  const inList=new Set((lists[who]||[]).filter(i=>i.t==="task").map(i=>i.k+i.tid));
+  const groups = mlGroups((tab==="watch"?watch:todo).slice().sort((a,b)=>(a.task.deadline||"9999").localeCompare(b.task.deadline||"9999")),"due");
+  const cols="minmax(0,1fr) 60px 68px 28px";
+  const tabBtn=(k,l,n)=><button key={k} onClick={()=>setTab(k)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===k?"var(--inv)":"transparent"}`,padding:"2px 2px 8px",marginRight:16,fontSize:12,fontWeight:tab===k?700:500,color:tab===k?T.text:T.text3,cursor:"pointer",fontFamily:"inherit"}}>{l} <span style={{color:T.text4,fontWeight:500}}>{n}</span></button>;
+  return (
+    <MLShell title="My work" hint="Your tasks by when they are due." sh={sh}
+      toolbar={<div style={{flexShrink:0,display:"flex",borderBottom:`1px solid ${T.border}`}}>{tabBtn("todo","To do",todo.length)}{tabBtn("done","Done",done.length)}{tabBtn("watch","Watching",watch.length)}</div>}>
+      {tab==="done" ? (done.length===0 ? <div style={{fontSize:12.5,color:T.text4,padding:"14px 20px"}}>Nothing completed yet. Tasks you finish move to the archive and show here.</div> : done.map(a=>(
+        <div key={a.id+(a.archivedAt||"")} style={rowCss("16px minmax(0,1fr) auto",{cursor:"default"})}>
+          <span style={{color:"#1E8A4C",display:"inline-flex"}}><Icon n="check" size={13}/></span>
+          <span style={{fontSize:12,color:T.text3,textDecoration:"line-through",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.title}</span>
+          <span style={{fontSize:11.5,color:T.text4}}>{a.archivedAt?fmtDate(a.archivedAt):""}</span>
+        </div>))) : (groups.length===0 ? <div style={{fontSize:12.5,color:T.text4,padding:"14px 20px"}}>Nothing here.</div> : groups.map(g=>{ const isShut=!!shut[g.key]; return (
+        <div key={g.key}>
+          <GroupHead g={g} closed={isShut} toggle={()=>setShut(s=>({...s,[g.key]:!s[g.key]}))}/>
+          {!isShut && <><ColHead cols={cols} labels={["Name","Priority","Due date",""]}/>{g.items.map(x=>{ const on=inList.has(x.kind+x.task.id); return (
+            <div key={x.kind+x.task.id} className="mlr" onClick={()=>onOpen(x.kind,x.task.id)} style={rowCss(cols)}>
+              <NameCell x={x}/><PrioCell x={x}/><DueCell x={x}/>
+              <span className="mls" style={{opacity:on?1:undefined,justifySelf:"end"}}><button title={on?"Remove from Personal priorities":"Add to Personal priorities"} onClick={e=>{e.stopPropagation();onTogglePriority(who,x.kind,x.task.id);}} style={{...tbBtn(false),color:on?"var(--warn)":T.text3}}><Icon n="star" size={13} style={{fill:on?"currentColor":"none"}}/></button></span>
+            </div>); })}</>}
+        </div>); }))}
+    </MLShell>
+  );
+}
+
+// ── Recents: tasks opened on this device ──
+function MLRecents({all, sh, onOpen}) {
+  const rec=(()=>{ try{ return JSON.parse(localStorage.getItem("od_recents")||"[]"); }catch(e){ return []; } })().map(r=>({r,x:all.find(y=>y.kind===r.k&&y.task.id===r.id)})).filter(o=>o.x).slice(0,sh.full?30:10);
+  return (
+    <MLShell title="Recents" hint="Tasks you opened on this device." sh={sh}>
+      {rec.length===0 && <div style={{fontSize:12.5,color:T.text4,padding:"14px 20px"}}>Open a task card and it will show up here.</div>}
+      {rec.map(({r,x})=>{ const st=statusOf(x.kind,x.task.status); return (
+        <div key={r.k+r.id} className="mlr" onClick={()=>onOpen(x.kind,x.task.id)} style={rowCss("minmax(0,1fr) auto auto",{borderBottom:"none",minHeight:36})}>
+          <span style={{display:"flex",alignItems:"center",gap:8,minWidth:0,overflow:"hidden"}}>
+            <PieIcon color={mlCol(st)} frac={ML_FRAC[x.task.status]||0}/>
+            <span style={{fontSize:12.5,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{x.task.title}</span>
+            <AvatarStack names={asg(x.task)} size={18}/>
+            <span style={{fontSize:10.5,color:T.text4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>in {x.client} · {x.label}</span>
+          </span>
+          <span/><span style={{fontSize:11,color:T.text4,whiteSpace:"nowrap"}}>{timeAgo(r.at)}</span>
+        </div>); })}
+    </MLShell>
+  );
+}
+
+// ── page ──
+function MyListCards({layoutToggle, all, archive, people, who, setWho, lists, onOpen, onAddManual, onToggleManual, onPromote, onRemove, onReorder, onTogglePriority, onConvert, onClose, onClearDone}) {
+  const [view,setView]=useState("all");
+  const [colS,setColS]=useML("od_list_collapsed",{});
+  const [hidden,setHidden]=useML("od_list_hidden",{});
+  const [full,setFull]=useState(null); const [manage,setManage]=useState(false);
+  const [drag,setDrag]=useState(null); const [over,setOver]=useState(null);
+  const wrapRef=useRef(null); const [w,setW]=useState(1200);
+  useEffect(()=>{ const el=wrapRef.current; if(!el) return; const ro=new ResizeObserver(es=>{ for(const e of es) setW(e.contentRect.width); }); ro.observe(el); return ()=>ro.disconnect(); },[]);
+
+  const items = lists[who]||[];
+  const find = (k,id) => all.find(x=>x.kind===k && x.task.id===id);
+  const rows = items.map(it=>it.t==="task" ? {it, ref:find(it.k,it.tid)} : {it}).filter(r=>r.it.t==="manual" || (r.ref && !isDoneTask(r.ref.kind,r.ref.task)));
+  const prioRows = rows.filter(r=>r.it.t==="task" || r.it.p);
+  const manualRows = rows.filter(r=>r.it.t==="manual" && !r.it.p);
+  const prioOpen = prioRows.filter(r=>!(r.it.t==="manual"&&r.it.done)), prioDone = prioRows.filter(r=>r.it.t==="manual"&&r.it.done);
+  const manualOpen = manualRows.filter(r=>!r.it.done);
+  const mine = all.filter(x=>!isDoneTask(x.kind,x.task) && asg(x.task).includes(who));
+  const recentCount = (()=>{ try{ return (JSON.parse(localStorage.getItem("od_recents")||"[]")).filter(r=>find(r.k,r.id)).length; }catch(e){ return 0; } })();
+  const counts = {prio:prioOpen.length, assigned:mine.length, manual:manualOpen.length, work:mine.length, recents:recentCount};
+  const subs = {prio:"open",assigned:"open",manual:"open",work:"to do",recents:"opened"};
+
+  // drag and drop: reorder inside a list, or move a manual entry between Personal priorities and the manual list
+  const dropOn = (targetId, pos, tsec) => {
+    if (!drag || drag.id===targetId) return;
+    const di = items.find(i=>i.id===drag.id); if(!di) return;
+    if (di.t==="task" && tsec!=="prio") return;
+    const ids = items.map(i=>i.id).filter(id=>id!==drag.id); const at = ids.indexOf(targetId);
+    ids.splice(at<0?ids.length:(pos==="after"?at+1:at),0,drag.id);
+    onReorder(who, ids, di.t==="manual" ? {id:di.id,p:tsec==="prio"} : null);
+  };
+  const dropEnd = tsec => {
+    if (!drag) return; const di = items.find(i=>i.id===drag.id); if(!di) return;
+    if (di.t==="task" && tsec!=="prio") return;
+    const ids = items.map(i=>i.id).filter(id=>id!==drag.id); ids.push(drag.id);
+    onReorder(who, ids, di.t==="manual" ? {id:di.id,p:tsec==="prio"} : null);
+  };
+  const dnd = {
+    row:(id,sec)=>({
+      draggable:true,
+      onDragStart:e=>{ setDrag({id,sec}); e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",id);}catch(x){} },
+      onDragOver:e=>{ if(!drag) return; e.preventDefault(); e.stopPropagation(); const rc=e.currentTarget.getBoundingClientRect(); const pos=e.clientY>rc.top+rc.height/2?"after":"before"; if(!over||over.id!==id||over.pos!==pos) setOver({id,pos,sec}); },
+      onDrop:e=>{ e.preventDefault(); e.stopPropagation(); const rc=e.currentTarget.getBoundingClientRect(); dropOn(id, e.clientY>rc.top+rc.height/2?"after":"before", sec); setDrag(null); setOver(null); },
+      onDragEnd:()=>{ setDrag(null); setOver(null); }
+    }),
+    sec:sec=>({
+      onDragOver:e=>{ if(!drag) return; const di=items.find(i=>i.id===drag.id); if(!di || (di.t==="task"&&sec!=="prio")) return; e.preventDefault(); if(!over||!over.end||over.sec!==sec) setOver({sec,end:true}); },
+      onDrop:e=>{ if(!drag) return; e.preventDefault(); dropEnd(sec); setDrag(null); setOver(null); }
+    }),
+    secStyle:sec=>({outline:over&&over.end&&over.sec===sec?"2px dashed var(--info)":"2px dashed transparent",outlineOffset:-4,borderRadius:14,transition:"outline-color .12s"}),
+    mark:id=>({opacity:drag&&drag.id===id?.4:1,boxShadow:over&&over.id===id?(over.pos==="before"?"inset 0 2px 0 var(--info)":"inset 0 -2px 0 var(--info)"):"none"})
+  };
+
+  const sh0 = id => ({collapsed:view==="all"&&!!colS[id], onToggle:()=>setColS(c=>({...c,[id]:!c[id]})), onExpand:()=>setFull(id)});
+  const card = (id, isFull) => {
+    const sh = isFull ? {full:true,onClose:()=>setFull(null)} : sh0(id);
+    if (id==="prio") return <MLPrio who={who} all={all} lists={lists} onTogglePriority={onTogglePriority} rows={prioOpen} doneRows={prioDone} sh={sh} dnd={dnd} onOpen={onOpen} onToggleManual={onToggleManual} onPromote={onPromote} onRemove={onRemove} onAddManual={onAddManual} onClearDone={onClearDone}/>;
+    if (id==="assigned") return <MLAssigned who={who} all={all} lists={lists} sh={sh} onOpen={onOpen} onTogglePriority={onTogglePriority}/>;
+    if (id==="manual") return <MLManual who={who} rows={manualRows} sh={sh} dnd={dnd} onToggleManual={onToggleManual} onPromote={onPromote} onRemove={onRemove} onConvert={onConvert} onAddManual={onAddManual} onClearDone={onClearDone}/>;
+    if (id==="work") return <MLWork who={who} all={all} archive={archive} lists={lists} sh={sh} onOpen={onOpen} onTogglePriority={onTogglePriority}/>;
+    return <MLRecents all={all} sh={sh} onOpen={onOpen}/>;
+  };
+  const shown = ML_CARDS.filter(c=>!hidden[c[0]]);
+  const visible = shown.filter(c=>view==="all"||view===c[0]);
+  const twoCol = view==="all" && w>=980;
+  const hr = new Date().getHours(); const greet = hr<12?"Good morning":hr<18?"Good afternoon":"Good evening";
+  const isMe = who===CURRENT_USER;
+  const first = (who||"").split(" ")[0];
+  return (
+    <div style={{position:"absolute",inset:0,zIndex:60,background:T.bg,display:"flex",flexDirection:"column",minHeight:0}}>
+      <style>{".mlr .mls{opacity:.4;transition:opacity .12s}.mlr:hover .mls{opacity:1}.mlr .mlk{opacity:0;transition:opacity .12s}.mlr:hover .mlk,.mlr:focus-within .mlk{opacity:1}.mlr:hover{background:var(--surface2)}"}</style>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 22px",borderBottom:`1px solid ${T.border}`,background:T.surface,flexShrink:0,flexWrap:"wrap"}}>
+        <Avatar name={who} size={32}/>
+        <div>
+          <div style={{fontSize:19,fontWeight:700,color:T.text,letterSpacing:"-0.01em",lineHeight:1.2}}>User Lists</div>
+          <div style={{fontSize:11.5,color:T.text3,marginTop:2}}>{isMe?"Your":who+"'s"} personal priorities, assigned tasks and manual list</div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <Btn variant="primary" size="sm" onClick={()=>setManage(m=>!m)}>Manage cards</Btn>
+          <select aria-label="Whose list" value={who} onChange={e=>setWho(e.target.value)} style={{background:T.bg,color:T.text,border:`1px solid ${T.border}`,borderRadius:999,padding:"6px 14px",fontSize:12.5,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
+            {people.map(p=><option key={p} value={p}>{p===CURRENT_USER?p+" (me)":p}</option>)}
+          </select>
+          {layoutToggle}
+          <Btn onClick={onClose}>Back to dashboards</Btn>
+        </div>
+      </div>
+      <div style={{flex:1,minHeight:0,overflowY:"auto",position:"relative"}} onDragOver={e=>{ if(drag) e.preventDefault(); }}>
+        <div ref={wrapRef} style={{maxWidth:1240,margin:"0 auto",padding:"22px 24px 70px"}}>
+          <h1 style={{margin:"0 0 16px",fontSize:22,fontWeight:700,color:T.text,letterSpacing:"-0.01em"}}>{greet}, {first}</h1>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:6}}>
+            {shown.map(([k,l])=>{ const on=view===k; return (
+              <button key={k} onClick={()=>setView(on?"all":k)} aria-pressed={on} style={{textAlign:"left",background:on?T.surface2:T.surface,border:`1.5px solid ${on?"var(--inv)":T.border}`,borderRadius:14,padding:"10px 14px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",gap:3,transition:"border-color .12s,background .12s"}}>
+                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:on?T.text:T.text2}}>{k==="assigned"&&!isMe?"Assigned":l}</span>
+                <span style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:"-0.02em",lineHeight:1.1}}>{counts[k]}</span><span style={{fontSize:11.5,color:T.text3}}>{subs[k]}</span></span>
+              </button>); })}
+          </div>
+          <div style={{fontSize:11.5,color:T.text4,margin:"0 2px 20px"}}>{view==="all"?"Click a card to show only that part.":"Showing one part. Click the card again to show everything."}</div>
+          {visible.length===0 && <div style={{padding:"30px 0",color:T.text3,fontSize:13}}>All cards are hidden. Use Manage cards to add some back.</div>}
+          <div style={{display:"grid",gridTemplateColumns:twoCol?"repeat(2,minmax(0,1fr))":"minmax(0,1fr)",gap:24,alignItems:"start"}}>
+            {visible.map((c,i)=><div key={c[0]} style={{minWidth:0,gridColumn:twoCol&&i===visible.length-1&&visible.length%2===1?"1 / -1":"auto"}}>{card(c[0],false)}</div>)}
+          </div>
+        </div>
+      </div>
+      {manage && (
+        <div style={{position:"absolute",top:0,right:0,bottom:0,width:340,maxWidth:"100%",zIndex:80,background:T.surface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 36px rgba(0,0,0,.25)",display:"flex",flexDirection:"column"}}>
+          <div style={{display:"flex",alignItems:"center",padding:"16px 18px"}}><span style={{fontSize:15,fontWeight:700,color:T.text}}>Add cards</span><span style={{flex:1}}/><button onClick={()=>setManage(false)} aria-label="Close" style={tbBtn(false)}><Icon n="x" size={15}/></button></div>
+          <div style={{padding:"0 18px 18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
+            {ML_CARDS.map(([k,l,d])=>{ const on=!hidden[k]; return (
+              <div key={k} style={{display:"flex",alignItems:"center",gap:10,border:`1px solid ${T.border}`,borderRadius:14,padding:"12px 14px"}}>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text}}>{l}</div><div style={{fontSize:11.5,color:T.text3,marginTop:2,lineHeight:1.35}}>{d}</div></div>
+                <button onClick={()=>setHidden(h=>({...h,[k]:on}))} style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:5,borderRadius:999,padding:"4px 11px",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:on?"var(--inv)":"transparent",color:on?"var(--inv-fg)":T.text2,border:`1px solid ${on?"var(--inv)":T.border2}`}}>{on?<><Icon n="check" size={11}/>Added</>:<><Icon n="plus" size={11}/>Add</>}</button>
+              </div>); })}
+          </div>
+        </div>)}
+      {full && (
+        <div onMouseDown={e=>{ if(e.target===e.currentTarget) setFull(null); }} style={{position:"absolute",inset:0,zIndex:90,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div style={{width:"100%",maxWidth:1100,height:"100%",maxHeight:"92%",background:T.surface,border:`1px solid ${T.border2}`,borderRadius:18,overflow:"hidden",boxShadow:"0 24px 70px rgba(0,0,0,.5)"}}>{card(full,true)}</div>
+        </div>)}
+    </div>
+  );
+}
+
+
+// ── layout switch: Cards (new) or Classic (previous) ──
+function MyList(props) {
+  const [layout,setLayoutS]=useState(()=>{ try{ return localStorage.getItem("od_list_layout")==="classic"?"classic":"cards"; }catch(e){ return "cards"; } });
+  const setLayout = v => { setLayoutS(v); try{ localStorage.setItem("od_list_layout",v); }catch(e){} };
+  const toggle = (
+    <span role="group" aria-label="Layout" style={{display:"inline-flex",background:T.bg,border:`1px solid ${T.border}`,borderRadius:999,padding:2}}>
+      {[["cards","Cards"],["classic","Classic"]].map(([k,l])=><button key={k} onClick={()=>setLayout(k)} aria-pressed={layout===k} style={{border:"none",borderRadius:999,padding:"4px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:layout===k?"var(--inv)":"transparent",color:layout===k?"var(--inv-fg)":T.text2}}>{l}</button>)}
+    </span>
+  );
+  return layout==="classic" ? <MyListClassic {...props} layoutToggle={toggle}/> : <MyListCards {...props} layoutToggle={toggle}/>;
 }
 
 
@@ -3990,8 +4449,8 @@ function App() {
   const people = TEAM;
   const setPl = (p, fn) => upd(d=>{ d.priorityLists = {...(d.priorityLists||{})}; d.priorityLists[p] = fn([...(d.priorityLists[p]||[])]); });
   const isIn = (x,k,tid) => x.t==="task" && x.k===k && x.tid===tid;
-  const togglePriority = (p,k,tid) => setPl(p, l=>l.some(x=>isIn(x,k,tid)) ? l.filter(x=>!isIn(x,k,tid)) : [...l,{id:uid(),t:"task",k,tid}]);
-  const addManual = (p,text) => setPl(p, l=>[...l,{id:uid(),t:"manual",text,done:false,at:Date.now()}]);
+  const togglePriority = (p,k,tid) => setPl(p, l=>l.some(x=>isIn(x,k,tid)) ? l.filter(x=>!isIn(x,k,tid)) : [...l,{id:uid(),t:"task",k,tid,at:Date.now()}]);
+  const addManual = (p,text,pr) => setPl(p, l=>[...l,{id:uid(),t:"manual",text,done:false,at:Date.now(),...(pr?{p:true}:{})}]);
   const toggleManual = (p,id) => setPl(p, l=>l.map(x=>x.id===id?{...x,done:!x.done}:x));
   const promoteManual = (p,id,on) => setPl(p, l=>l.map(x=>x.id===id?{...x,p:!!on}:x));
   const removePl = (p,id) => setPl(p, l=>l.filter(x=>x.id!==id));
