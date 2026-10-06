@@ -4389,11 +4389,11 @@ function App() {
   const [superComms, setSuperComms] = useState(null);
   const [mlEdit, setMlEdit] = useState(null);
   const [listOpen, setListOpen] = useState(false);
-  const [listUnlocked, setListUnlocked] = useState(()=>{ try{ return sessionStorage.getItem("od_admin_ok")==="1"; }catch(e){ return false; } });
+  
   const [pwOpen, setPwOpen] = useState(false);
   const [pwTry, setPwTry] = useState("");
   const [pwErr, setPwErr] = useState(false);
-  const tryUnlock = () => { if(pwTry==="admin"){ setListUnlocked(true); try{ sessionStorage.setItem("od_admin_ok","1"); }catch(x){} setPwOpen(false); setListOpen(true); } else setPwErr(true); };
+  const tryUnlock = () => { if(pwTry==="admin"){ try{ sessionStorage.removeItem("od_admin_ok"); }catch(x){} setPwOpen(false); setListOpen(true); } else setPwErr(true); };
   const [listWho, setListWhoS] = useState(()=>{ try{ return localStorage.getItem(ML_WHO_KEY)||CURRENT_USER; }catch(e){ return CURRENT_USER; } });
   const setListWho = v => { setListWhoS(v); try{ localStorage.setItem(ML_WHO_KEY,v); }catch(e){} };
   const [techDataOpen, setTechDataOpen] = useState(null);
@@ -4946,7 +4946,7 @@ function App() {
               {label:"Client Site Register",run:()=>{setClientTab("tech");setTechSub("register");setSearch("");}},
               {label:"Clean up clients",run:()=>setClientsFix(true)},
               {label:"Client Spec Sheet",run:()=>{setClientTab("tech");setTechSub("spec");setSearch("");}},
-              {label:"User Lists",badge:"Under review / do not use",sep:true,run:()=>{ if(listUnlocked) setListOpen(true); else { setPwTry(""); setPwErr(false); setPwOpen(true); } }}
+              {label:"User Lists",badge:"Under review / do not use",sep:true,run:()=>{ setPwTry(""); setPwErr(false); setPwOpen(true); }}
             ].map(it=>(
               <div key={it.label}>
                 {it.sep && <div style={{height:1,background:T.border,margin:"4px 6px"}}/>}
